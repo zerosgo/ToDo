@@ -18,8 +18,9 @@
    - Node.js가 설치되어 있는지 확인하고, 없으면 "winget install OpenJS.NodeJS.LTS -e --source winget" 명령어로 설치해줘.
 
 2. [프로젝트 가져오기]
-   - C:\Projects 또는 적절한 작업 폴더를 생성해줘.
+   - "D:\(02) Project" 폴더를 생성해줘 (없으면 생성).
    - 그 안에서 내 레포지토리를 클론해줘: "git clone https://github.com/zeros79ya/ToDo.git"
+   - 결과적으로 "D:\(02) Project\ToDo" 폴더에 코드가 위치해야 해.
 
 3. [문맥 파악하기]
    - ToDo 폴더로 이동해.
