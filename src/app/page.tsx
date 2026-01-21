@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Category, Task } from '@/lib/types';
-import { getCategories, getTasks, addTask, getTheme, setTheme, Theme, getLayoutState, saveLayoutState, getLayoutPreset, saveLayoutPreset, Layout, LayoutState, generateId, addCategory } from '@/lib/storage';
+import { getCategories, getTasks, addTask, getTheme, setTheme, Theme, getLayoutState, saveLayoutState, getLayoutPreset, saveLayoutPreset, Layout, LayoutState, generateId, addCategory, deleteTask } from '@/lib/storage';
 import { Sidebar } from '@/components/sidebar';
 import { TaskList } from '@/components/task-list';
 import { CalendarView } from '@/components/calendar-view';
@@ -10,7 +10,7 @@ import { KeepView } from '@/components/keep-view';
 import { TaskDetailDialog } from '@/components/task-detail-dialog';
 import { ImportExportDialog } from '@/components/import-export-dialog';
 import { ScheduleImportDialog } from '@/components/schedule-import-dialog';
-import { ParsedSchedule } from '@/lib/schedule-parser';
+import { ParsedSchedule, parseScheduleText } from '@/lib/schedule-parser';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeft, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -347,41 +347,70 @@ export default function Home() {
     }
   };
 
-  const handleScheduleImport = (schedules: ParsedSchedule[]) => {
-    import('@/lib/storage').then(({ addCategory, addTask, getCategories, getTasks, deleteTask }) => {
-      // 1. Find or create "Team Schedule" category
-      let scheduleCategory = categories.find(c => c.name === '팀 일정');
-      if (!scheduleCategory) {
-        scheduleCategory = addCategory('팀 일정');
-      }
+  const handleScheduleImport = useCallback((schedules: ParsedSchedule[]) => {
+    // 1. Find or create "Team Schedule" category
+    let scheduleCategory = categories.find(c => c.name === '팀 일정');
+    if (!scheduleCategory) {
+      scheduleCategory = addCategory('팀 일정');
+    }
 
-      // 2. Clear existing tasks in the Team Schedule category (Overwrite Strategy)
-      const existingTasks = getTasks(scheduleCategory.id);
-      existingTasks.forEach(t => deleteTask(t.id));
+    // 2. Clear existing tasks in the Team Schedule category (Overwrite Strategy)
+    const existingTasks = getTasks(scheduleCategory.id);
+    existingTasks.forEach(t => deleteTask(t.id));
 
-      // 3. Add new tasks
-      schedules.forEach(schedule => {
-        if (!scheduleCategory) return;
+    // 3. Add new tasks
+    schedules.forEach(schedule => {
+      if (!scheduleCategory) return;
 
-        // Use addTask helper which handles ID generation
-        addTask(
-          scheduleCategory.id,
-          schedule.title,
-          schedule.date.toISOString(),
-          { dueTime: schedule.time, highlightLevel: schedule.highlightLevel }
-        );
-      });
-
-      // 4. Reload
-      loadCategories();
-      loadTasks();
-
-      // 5. Ensure the schedule category is selected so user sees it immediately
-      if (scheduleCategory && !selectedCategoryIds.includes(scheduleCategory.id)) {
-        setSelectedCategoryIds(prev => [...prev, scheduleCategory!.id]);
-      }
+      // Use addTask helper which handles ID generation
+      addTask(
+        scheduleCategory.id,
+        schedule.title,
+        schedule.date.toISOString(),
+        { dueTime: schedule.time, highlightLevel: schedule.highlightLevel }
+      );
     });
-  };
+
+    // 4. Reload
+    loadCategories();
+    loadTasks();
+
+    // 5. Ensure the schedule category is selected so user sees it immediately
+    if (scheduleCategory && !selectedCategoryIds.includes(scheduleCategory.id)) {
+      setSelectedCategoryIds(prev => [...prev, scheduleCategory!.id]);
+    }
+  }, [categories, selectedCategoryIds, loadCategories, loadTasks]);
+
+  // Listen for 'SCHEDULE_SYNC' messages from Chrome Extension
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Expect event.data to have { type: 'SCHEDULE_SYNC', text: string, year?: number, month?: number }
+      if (event.data?.type === 'SCHEDULE_SYNC' && event.data?.text) {
+        try {
+          // Use provided year/month or fallback to current state
+          const year = event.data.year || currentMonth.getFullYear();
+          const month = event.data.month !== undefined ? event.data.month : currentMonth.getMonth();
+
+          console.log(`Auto-syncing schedule for ${year}-${month + 1}`);
+
+          const result = parseScheduleText(event.data.text, year, month);
+
+          if (result.length > 0) {
+            handleScheduleImport(result);
+            // Show a simple browser notification or alert (optional, keeping it silent or subtle is better for automation)
+            console.log('Schedule synced successfully via extension');
+          } else {
+            console.warn('Sync received but no schedules parsed');
+          }
+        } catch (e) {
+          console.error('Auto sync failed:', e);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [currentMonth, handleScheduleImport]);
 
   const selectedCategory = categories.find(c => selectedCategoryIds.includes(c.id)) || null;
 

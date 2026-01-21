@@ -1,0 +1,40 @@
+{
+    "manifest_version": 3,
+    "name": "ToDo Team Schedule Syncer",
+    "version": "1.0",
+    "description": "Syncs Samsung PIMS Calendar to Local ToDo App",
+    "permissions": [
+        "tabs",
+        "scripting",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "http://kor4.samsung.net/*",
+        "http://localhost:3000/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "http://kor4.samsung.net/pimsapp/calendar*"
+            ],
+            "js": [
+                "content-knox.js"
+            ]
+        },
+        {
+            "matches": [
+                "http://localhost:3000/*"
+            ],
+            "js": [
+                "content-todo.js"
+            ]
+        }
+    ],
+    "action": {
+        "default_title": "Sync Schedule",
+        "default_popup": "popup.html"
+    }
+}
