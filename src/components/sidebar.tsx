@@ -756,14 +756,14 @@ export function Sidebar({
             < Dialog open={isQuickLinkDialogOpen} onOpenChange={setIsQuickLinkDialogOpen} >
                 <DialogContent>
                     <DialogHeader>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between">
                             <DialogTitle>
                                 {editingQuickLink ? '파일 수정' : '자주 쓰는 파일 추가'}
                             </DialogTitle>
                             <button
                                 type="button"
                                 onClick={() => setQuickLinkFavorite(!quickLinkFavorite)}
-                                className={`p-1 rounded-md transition-colors text-gray-400 hover:text-yellow-500 hover:bg-gray-100 dark:hover:bg-gray-800 ${quickLinkFavorite ? 'text-yellow-500' : ''}`}
+                                className={`p-1 rounded-md transition-colors text-gray-400 hover:text-yellow-500 hover:bg-gray-100 dark:hover:bg-gray-800 mr-12 ${quickLinkFavorite ? 'text-yellow-500' : ''}`}
                             >
                                 <Star className={`w-6 h-6 ${quickLinkFavorite ? 'fill-yellow-500' : ''}`} />
                             </button>

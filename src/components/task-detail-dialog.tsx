@@ -306,12 +306,12 @@ export function TaskDetailDialog({
                     onKeyDown={handleKeyDown}
                 >
                     <DialogHeader>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between">
                             <DialogTitle>할 일 상세</DialogTitle>
                             <button
                                 type="button"
                                 onClick={() => setIsFavorite(!isFavorite)}
-                                className={`p-1 rounded-md transition-colors text-gray-400 hover:text-yellow-500 hover:bg-gray-100 dark:hover:bg-gray-800 ${isFavorite ? 'text-yellow-500' : ''}`}
+                                className={`p-1 rounded-md transition-colors text-gray-400 hover:text-yellow-500 hover:bg-gray-100 dark:hover:bg-gray-800 mr-12 ${isFavorite ? 'text-yellow-500' : ''}`}
                             >
                                 <Star className={`w-6 h-6 ${isFavorite ? 'fill-yellow-500' : ''}`} />
                             </button>
