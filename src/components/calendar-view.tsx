@@ -27,6 +27,8 @@ import { ChevronLeft, ChevronRight, GripVertical, Trash2, Paperclip, Plus, Searc
 import { motion, AnimatePresence } from 'framer-motion';
 import { TeamScheduleAddModal } from './team-schedule-add-modal';
 import { TeamScheduleSearchModal } from './team-schedule-search-modal';
+import { CalendarSettingsModal, CalendarSettings, DEFAULT_SETTINGS } from './calendar-settings-modal';
+import { Settings } from 'lucide-react';
 
 interface CalendarViewProps {
     tasks: Task[];
@@ -82,39 +84,41 @@ export function CalendarView({
     // Get Team Schedule Category ID
     const teamScheduleCategoryId = categories.find(c => c.name === '팀 일정')?.id || '';
 
-    // Item height percentage (20% - 60%, default 35%)
-    const [itemHeightPercent, setItemHeightPercent] = useState(35);
-    const [isHeightInitialized, setIsHeightInitialized] = useState(false);
+    // Calendar Settings
+    const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
-    // Load item height from localStorage
+    // Load settings from localStorage
     useEffect(() => {
-        const saved = localStorage.getItem('calendar-item-height');
+        const saved = localStorage.getItem('calendar-settings');
         if (saved) {
-            const parsed = parseInt(saved, 10);
-            if (!isNaN(parsed) && parsed >= 20 && parsed <= 60) {
-                setItemHeightPercent(parsed);
+            try {
+                setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+            } catch (e) {
+                console.error('Failed to parse calendar settings', e);
             }
         }
-        setIsHeightInitialized(true);
+        setIsSettingsLoaded(true);
     }, []);
 
-    // Save item height to localStorage (only after initialization)
+    // Save settings to localStorage
     useEffect(() => {
-        if (isHeightInitialized) {
-            localStorage.setItem('calendar-item-height', itemHeightPercent.toString());
+        if (isSettingsLoaded) {
+            localStorage.setItem('calendar-settings', JSON.stringify(settings));
         }
-    }, [itemHeightPercent, isHeightInitialized]);
+    }, [settings, isSettingsLoaded]);
 
-    // Keyboard shortcut: Ctrl+Shift+Arrow to adjust item height
+    // Keyboard shortcut: Ctrl+Shift+Arrow to adjust item height (Update Settings)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.ctrlKey && e.shiftKey) {
                 if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    setItemHeightPercent(prev => Math.min(60, prev + 5));
+                    setSettings(prev => ({ ...prev, itemHeightPercent: Math.min(60, prev.itemHeightPercent + 5) }));
                 } else if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    setItemHeightPercent(prev => Math.max(20, prev - 5));
+                    setSettings(prev => ({ ...prev, itemHeightPercent: Math.max(20, prev.itemHeightPercent - 5) }));
                 }
             }
 
@@ -130,7 +134,7 @@ export function CalendarView({
     }, []);
 
     // Calculate actual height in pixels (base: 18px at 35%)
-    const itemHeight = Math.round(18 * (itemHeightPercent / 35));
+    const itemHeight = Math.round(18 * (settings.itemHeightPercent / 35));
 
     // Smart Update: Set timeout for the next significant event (Meeting Start or Meeting End)
     useEffect(() => {
@@ -375,7 +379,15 @@ export function CalendarView({
 
                 {/* Empty div for layout balance */}
                 {/* Search Button (Right Aligned) */}
-                <div className="w-[140px] flex justify-end">
+                {/* Search & Settings Buttons (Right Aligned) */}
+                <div className="flex justify-end gap-2">
+                    <button
+                        onClick={() => setIsSettingsModalOpen(true)}
+                        className="p-1.5 text-gray-500 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 rounded transition-colors"
+                        title="스타일 설정"
+                    >
+                        <Settings className="w-4 h-4" />
+                    </button>
                     <button
                         onClick={() => setIsSearchModalOpen(true)}
                         className="px-3 py-1 text-sm font-medium rounded transition-colors bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1"
@@ -541,11 +553,43 @@ export function CalendarView({
                                 // Regular tasks display logic
 
 
+                                // Determine Today Style
+                                const todayBgClass = (() => {
+                                    if (!isToday(day)) return '';
+                                    switch (settings.todayBgColor) {
+                                        // Reverted to lighter shades but ensured visibility by removing default bg
+                                        case 'yellow': return 'bg-yellow-50/50 dark:bg-yellow-900/20';
+                                        case 'orange': return 'bg-orange-50/50 dark:bg-orange-900/20';
+                                        case 'green': return 'bg-green-50/50 dark:bg-green-900/20';
+                                        case 'none': return '';
+                                        case 'blue':
+                                        default: return 'bg-blue-50/50 dark:bg-blue-900/20';
+                                    }
+                                })();
+
+                                const todayBorderClass = (() => {
+                                    if (!isToday(day)) return '';
+                                    // Use ring-inset to avoid layout shifts, reduced to ring-1 (1px) for default thickness behavior
+                                    switch (settings.todayBorderColor) {
+                                        case 'light': return 'ring-1 ring-inset ring-gray-300 dark:ring-gray-600';
+                                        case 'medium': return 'ring-1 ring-inset ring-gray-400 dark:ring-gray-500';
+                                        case 'dark': return 'ring-1 ring-inset ring-gray-600 dark:ring-gray-400';
+                                        case 'default':
+                                        default: return '';
+                                    }
+                                })();
+
+                                const defaultBgClass = !isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-900' : 'bg-white dark:bg-gray-800';
+                                // If today and has a custom color, strictly NO default background to prevent overlay issues.
+                                // If tone is 'none', use default background.
+                                const finalBgClass = isToday(day) && settings.todayBgColor !== 'none'
+                                    ? todayBgClass
+                                    : `${defaultBgClass} ${todayBgClass}`;
+
                                 return (
                                     <motion.div
                                         key={day.toISOString()}
-                                        className={`min-h-[60px] border-b border-r border-gray-200 dark:border-gray-700 p-1 transition-colors ${!isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-900' : 'bg-white dark:bg-gray-800'
-                                            } ${isToday(day) ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''} ${isDropTarget ? 'bg-blue-100 dark:bg-blue-800/50 ring-2 ring-blue-400 ring-inset' : ''
+                                        className={`min-h-[60px] border-b border-r border-gray-200 dark:border-gray-700 p-1 transition-colors ${finalBgClass} ${todayBorderClass} ${isDropTarget ? 'bg-blue-100 dark:bg-blue-800/50 ring-2 ring-blue-400 ring-inset' : ''
                                             } hover:bg-gray-50 dark:hover:bg-gray-800/50`}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -564,35 +608,67 @@ export function CalendarView({
                                         <div className={`text-sm font-medium mb-1 ${!isCurrentMonth ? 'text-gray-300 dark:text-gray-600' :
                                             dayOfWeek === 0 ? 'text-red-500' :
                                                 dayOfWeek === 6 ? 'text-blue-500' : 'text-gray-700 dark:text-gray-200'
-                                            } ${isToday(day) ? 'bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}`}>
+                                            } ${isToday(day) ? 'bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center border-2 border-gray-600 dark:border-gray-400' : ''}`}>
                                             {format(day, 'd')}
                                         </div>
 
-                                        <div className="space-y-0.5">
+                                        <div
+                                            className="flex flex-col"
+                                            style={{ gap: `${settings.itemSpacing}px` }}
+                                        >
                                             {/* 1. Schedule Tasks (Simple Text) */}
                                             {/* Past weeks: limit to 3, Current/Future weeks: show all */}
                                             {(isWeekPast ? scheduleTasks.slice(0, 3) : scheduleTasks).map((task) => {
+                                                // Border Logic:
+                                                // - All Schedules: 3px left border
+                                                // - Active: Yellow
+                                                // - Others (Executive & Team): Unified Bright Gray
+
                                                 const isActive = isMeetingActive(task);
                                                 const highlightLevel = task.highlightLevel || 0;
 
-                                                // Border Color: Prioritize highlight level logic, fallback to yellow if active but no highlight
-                                                const borderColor = highlightLevel === 1 ? 'border-red-500' :
-                                                    highlightLevel === 2 ? 'border-green-500' :
-                                                        highlightLevel === 3 ? 'border-purple-500' :
-                                                            isActive ? 'border-yellow-500 dark:border-yellow-300' : 'border-transparent';
+                                                const leftBorderClass = 'border-l-[3px]';
 
-                                                // Background & Text: Active takes precedence
+                                                const leftBorderColor = isActive
+                                                    ? 'border-l-yellow-500 dark:border-l-yellow-300'
+                                                    : 'border-l-gray-300 dark:border-l-gray-600'; // Unified for ALL schedules
+
+                                                // Completed Task Visibility
+                                                if (task.completed && settings.completedMode === 'hidden') return null;
+
+                                                // Background & Text: Active takes precedence, otherwise use gray background for all schedules
+                                                // Dynamic BG color from settings (Light mode only logic for now, Dark mode falls back to gray-800)
+                                                const bgColorStyle = isActive
+                                                    ? {} // Active uses class
+                                                    : { backgroundColor: `hsl(220, 13%, ${settings.bgLightness}%)` };
+
                                                 const styleClasses = isActive
                                                     ? 'bg-yellow-200 text-yellow-900 dark:bg-yellow-600 dark:text-yellow-50 font-bold'
-                                                    : highlightLevel > 0
-                                                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-                                                        : 'bg-transparent text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800';
+                                                    : 'text-gray-900 dark:text-gray-100 hover:brightness-95 dark:hover:bg-gray-700';
+
+                                                // Border Color from settings
+                                                const borderColorStyle = settings.showBorder
+                                                    ? { borderColor: `hsl(220, 13%, ${100 - settings.borderDarkness}%)` }
+                                                    : { borderColor: 'transparent' };
+
+                                                // Completed Style
+                                                const completedClass = task.completed && settings.completedMode === 'dimmed' ? 'opacity-50' :
+                                                    task.completed && settings.completedMode === 'strikethrough' ? 'line-through opacity-70' : '';
 
                                                 return (
                                                     <div
                                                         key={task.id}
-                                                        className={`flex items-center text-xs px-1 font-medium rounded cursor-pointer transition-colors w-full group/schedule border-l-[3px] ${borderColor} ${styleClasses}`}
-                                                        style={{ height: `${itemHeight}px` }}
+                                                        className={`flex items-center px-1 font-medium rounded cursor-pointer transition-colors w-full group/schedule border dark:border-gray-500 ${leftBorderClass} ${leftBorderColor} ${styleClasses} ${completedClass}`}
+                                                        style={{
+                                                            height: `${itemHeight}px`,
+                                                            fontSize: `${settings.fontSize}px`,
+                                                            ...bgColorStyle, // Apply dynamic BG
+                                                            // We set borders individually to avoid overriding the left border color (which indicates status)
+                                                            borderTopColor: settings.showBorder ? `hsl(220, 13%, ${100 - settings.borderDarkness}%)` : 'transparent',
+                                                            borderRightColor: settings.showBorder ? `hsl(220, 13%, ${100 - settings.borderDarkness}%)` : 'transparent',
+                                                            borderBottomColor: settings.showBorder ? `hsl(220, 13%, ${100 - settings.borderDarkness}%)` : 'transparent',
+                                                            // Removed borderLeftWidth: '3px' to let className control width (1px default, 3px for Active)
+                                                        }}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setEditingScheduleTask(task);
@@ -606,7 +682,7 @@ export function CalendarView({
                                                             <div className="ml-auto shrink-0 flex items-center gap-0.5">
                                                                 {task.resourceUrl && (
                                                                     <Paperclip
-                                                                        className="w-3 h-3 text-purple-500 cursor-pointer hover:text-purple-700"
+                                                                        className="w-3 h-3 text-gray-600 cursor-pointer hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             handleCopyUrl(task.resourceUrl!);
@@ -638,9 +714,42 @@ export function CalendarView({
                                             {/* 2. Regular Tasks (Box Style) */}
                                             {/* Past weeks: limit to 3, Current/Future weeks: show all */}
                                             {(isWeekPast ? regularTasks.slice(0, 3) : regularTasks).map((task) => {
+                                                // Completed Task Visibility
+                                                if (task.completed && settings.completedMode === 'hidden') return null;
+
                                                 const taskColor = getTaskColor(task);
                                                 const isOverdue = task.dueDate && !task.completed &&
                                                     new Date(task.dueDate).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
+
+                                                // Completed Style
+                                                const completedClass = task.completed && settings.completedMode === 'dimmed' ? 'opacity-50' :
+                                                    task.completed && settings.completedMode === 'strikethrough' ? 'opacity-70 line-through' : '';
+
+                                                const TaskStyle = task.completed
+                                                    ? {
+                                                        height: `${itemHeight}px`,
+                                                        fontSize: `${settings.fontSize}px`,
+                                                        borderLeft: '3px solid #d1d5db',
+                                                        // Use settings border for other sides? Regular tasks usually don't have border except left.
+                                                        // But if user wants border... let's stick to original style for Regular tasks (Box style)
+                                                        // User request "Colors & Style" mainly referred to "Team Schedule" (Gray bg).
+                                                        // For Regular tasks, we keep existing logic but apply fontsize/height.
+                                                    }
+                                                    : isOverdue
+                                                        ? {
+                                                            height: `${itemHeight}px`,
+                                                            fontSize: `${settings.fontSize}px`,
+                                                            backgroundColor: '#fee2e2',
+                                                            color: '#b91c1c',
+                                                            borderLeft: '3px solid #ef4444',
+                                                        }
+                                                        : {
+                                                            height: `${itemHeight}px`,
+                                                            fontSize: `${settings.fontSize}px`,
+                                                            backgroundColor: `${taskColor}15`,
+                                                            color: taskColor,
+                                                            borderLeft: `3px solid ${taskColor}`,
+                                                        };
 
                                                 return (
                                                     <div
@@ -648,22 +757,9 @@ export function CalendarView({
                                                         draggable
                                                         onDragStart={(e) => handleDragStart(e, task.id)}
                                                         onDragEnd={() => setDraggedTaskId(null)}
-                                                        className={`group/task relative text-xs px-1.5 rounded cursor-grab active:cursor-grabbing transition-all w-full overflow-hidden flex items-center ${draggedTaskId === task.id ? 'opacity-50 scale-95' : ''
-                                                            } ${task.completed ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 line-through' : 'dark:!bg-gray-700 dark:!text-gray-300'}`}
-                                                        style={task.completed ? {
-                                                            height: `${itemHeight}px`,
-                                                            borderLeft: '3px solid #d1d5db',
-                                                        } : isOverdue ? {
-                                                            height: `${itemHeight}px`,
-                                                            backgroundColor: '#fee2e2',
-                                                            color: '#b91c1c',
-                                                            borderLeft: '3px solid #ef4444',
-                                                        } : {
-                                                            height: `${itemHeight}px`,
-                                                            backgroundColor: `${taskColor}15`,
-                                                            color: taskColor,
-                                                            borderLeft: `3px solid ${taskColor}`,
-                                                        }}
+                                                        className={`group/task relative px-1.5 rounded cursor-grab active:cursor-grabbing transition-all w-full overflow-hidden flex items-center ${draggedTaskId === task.id ? 'opacity-50 scale-95' : ''
+                                                            } ${task.completed ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500' : 'dark:!bg-gray-700 dark:!text-gray-300'} ${completedClass}`}
+                                                        style={TaskStyle}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             if (task.categoryId === teamScheduleCategoryId) {
@@ -692,7 +788,7 @@ export function CalendarView({
                                                                     }}
                                                                     title="자료 열기"
                                                                 >
-                                                                    <Paperclip className="w-3 h-3 text-purple-500" />
+                                                                    <Paperclip className="w-3 h-3 text-gray-600 dark:text-gray-400" />
                                                                 </button>
                                                             )}
                                                         </div>
@@ -788,6 +884,14 @@ export function CalendarView({
                     onMonthChange(date);
                     setIsSearchModalOpen(false);
                 }}
+            />
+
+            <CalendarSettingsModal
+                isOpen={isSettingsModalOpen}
+                onClose={() => setIsSettingsModalOpen(false)}
+                settings={settings}
+                onSettingsChange={setSettings}
+                onReset={() => setSettings(DEFAULT_SETTINGS)}
             />
         </div>
     );
