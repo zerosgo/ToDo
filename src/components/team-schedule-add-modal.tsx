@@ -44,6 +44,7 @@ export function TeamScheduleAddModal({
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
     const [highlightLevel, setHighlightLevel] = useState<string>('0');
+    const [organizer, setOrganizer] = useState('');
     const [resourceUrl, setResourceUrl] = useState('');
     const [isFavorite, setIsFavorite] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -72,6 +73,7 @@ export function TeamScheduleAddModal({
                 }
 
                 setHighlightLevel(existingTask.highlightLevel?.toString() || '0');
+                setOrganizer(existingTask.organizer || '');
                 setResourceUrl(existingTask.resourceUrl || '');
                 setIsFavorite(existingTask.isFavorite || false);
             } else {
@@ -90,6 +92,7 @@ export function TeamScheduleAddModal({
                 setStartTime(defaultStartTime);
                 setEndTime(defaultEndTime);
                 setHighlightLevel('0');
+                setOrganizer('');
                 setResourceUrl('');
                 setIsFavorite(false);
             }
@@ -116,6 +119,7 @@ export function TeamScheduleAddModal({
                 dueDate: date.toISOString(),
                 dueTime: dueTimeString,
                 highlightLevel: parseInt(highlightLevel, 10) as 0 | 1 | 2 | 3,
+                organizer: organizer.trim() || undefined,
                 resourceUrl: resourceUrl.trim() || undefined,
                 isFavorite,
             });
@@ -127,6 +131,7 @@ export function TeamScheduleAddModal({
                 {
                     dueTime: dueTimeString,
                     highlightLevel: parseInt(highlightLevel, 10) as 0 | 1 | 2 | 3,
+                    organizer: organizer.trim() || undefined,
                     resourceUrl: resourceUrl.trim() || undefined,
                     isFavorite,
                 }

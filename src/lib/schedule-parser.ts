@@ -2,6 +2,7 @@ export interface ParsedSchedule {
     date: Date;
     time: string;
     title: string;
+    organizer?: string;
     highlightLevel: 0 | 1 | 2 | 3; // 0=none, 1=대표/이청(blue), 2=사업부/이주형(green), 3=센터/정성욱(purple)
 }
 
@@ -72,18 +73,25 @@ export const parseScheduleText = (text: string, currentYear: number, currentMont
                         }
                     }
 
-                    // Check organizer (line after title) - only if not already highlighted
-                    if (highlightLevel === 0 && i + 2 < lines.length) {
+                    // Check organizer (line after title)
+                    let organizerInfo = '';
+                    if (i + 2 < lines.length) {
                         const organizerLine = lines[i + 2];
-                        // Organizer is the first part before "/" 
-                        const organizer = organizerLine.split('/')[0].trim();
+                        // Ensure it's not a date/time line (though unlikely due to 4-line structure)
+                        if (!organizerLine.match(dateRegex) && !organizerLine.match(timeRegex)) {
+                            organizerInfo = organizerLine;
 
-                        if (HIGHLIGHT_LEVEL1.organizers.includes(organizer)) {
-                            highlightLevel = 1;
-                        } else if (HIGHLIGHT_LEVEL2.organizers.includes(organizer)) {
-                            highlightLevel = 2;
-                        } else if (HIGHLIGHT_LEVEL3.organizers.includes(organizer)) {
-                            highlightLevel = 3;
+                            // Highlight Logic based on Organizer Name
+                            if (highlightLevel === 0) {
+                                const organizerName = organizerLine.split('/')[0].trim();
+                                if (HIGHLIGHT_LEVEL1.organizers.includes(organizerName)) {
+                                    highlightLevel = 1;
+                                } else if (HIGHLIGHT_LEVEL2.organizers.includes(organizerName)) {
+                                    highlightLevel = 2;
+                                } else if (HIGHLIGHT_LEVEL3.organizers.includes(organizerName)) {
+                                    highlightLevel = 3;
+                                }
+                            }
                         }
                     }
 
@@ -91,6 +99,7 @@ export const parseScheduleText = (text: string, currentYear: number, currentMont
                         date: currentDate,
                         time: currentTime,
                         title: displayTitle,
+                        organizer: organizerInfo,
                         highlightLevel
                     });
                     // Skip the title line to avoid processing it again

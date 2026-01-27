@@ -384,7 +384,11 @@ export default function Home() {
         scheduleCategory.id,
         schedule.title,
         schedule.date.toISOString(),
-        { dueTime: schedule.time, highlightLevel: schedule.highlightLevel }
+        {
+          dueTime: schedule.time,
+          highlightLevel: schedule.highlightLevel,
+          organizer: schedule.organizer // Add parsing result
+        }
       );
     });
 

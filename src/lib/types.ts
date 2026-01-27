@@ -18,6 +18,7 @@ export interface Task {
     categoryId: string;
     title: string;
     assignee: string;
+    organizer?: string; // 주관자 (이름 / 소속)
     resourceUrl: string;
     notes: string;
     dueDate: string | null;

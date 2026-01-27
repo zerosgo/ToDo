@@ -774,7 +774,7 @@ export function CalendarView({
                                                             setEditingScheduleTask(task);
                                                             setIsTeamScheduleModalOpen(true);
                                                         }}
-                                                        title={`${task.title}${task.dueTime ? ` (${task.dueTime})` : ''} ${isActive ? '[진행 중]' : ''}`}
+                                                        title={task.organizer || `${task.title}${task.dueTime ? ` (${task.dueTime})` : ''} ${isActive ? '[진행 중]' : ''}`}
                                                     >
                                                         <div className="truncate w-full min-w-0 flex items-center gap-1">
                                                             {task.dueTime ? <span className="mr-1 opacity-75 whitespace-nowrap">{task.dueTime.match(/(\d{2}:\d{2})/)?.[0] || task.dueTime}</span> : ''}
