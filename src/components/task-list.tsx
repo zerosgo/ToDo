@@ -71,6 +71,11 @@ function AnimatedTaskItem({
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showCopyToast, setShowCopyToast] = useState(false);
 
+    // Subtask editing state
+    const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+    const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
+    const [editingSubtaskUrl, setEditingSubtaskUrl] = useState('');
+
     const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url);
         setShowCopyToast(true);
@@ -133,6 +138,42 @@ function AnimatedTaskItem({
             setEditTitle(task.title);
             setIsEditing(false);
         }
+    };
+
+    // Subtask edit handlers
+    const handleStartEditSubtask = (subtask: any) => {
+        setEditingSubtaskId(subtask.id);
+        setEditingSubtaskTitle(subtask.title);
+        setEditingSubtaskUrl(subtask.url || '');
+    };
+
+    const handleSaveEditSubtask = () => {
+        if (editingSubtaskId && task.subtasks) {
+            const newSubtasks = task.subtasks.map(s =>
+                s.id === editingSubtaskId
+                    ? { ...s, title: editingSubtaskTitle, url: editingSubtaskUrl || undefined }
+                    : s
+            );
+            updateTask(task.id, { subtasks: newSubtasks });
+            onTaskChange();
+        }
+        setEditingSubtaskId(null);
+    };
+
+    const handleCancelEditSubtask = () => {
+        setEditingSubtaskId(null);
+    };
+
+    const handleSubtaskEditKeyDown = (e: React.KeyboardEvent) => {
+        // Ctrl+Enter: Save and close
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            handleSaveEditSubtask();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancelEditSubtask();
+        }
+        // Tab works normally for field navigation
     };
 
     // Calculate D-Day
@@ -367,33 +408,68 @@ function AnimatedTaskItem({
 
                     {/* Expandable Subtasks List */}
                     {isExpanded && task.subtasks && (
-                        <div className="w-full mt-2 pl-1 space-y-1">
+                        <Reorder.Group
+                            axis="y"
+                            values={task.subtasks}
+                            onReorder={(newOrder) => {
+                                updateTask(task.id, { subtasks: newOrder });
+                                onTaskChange();
+                            }}
+                            className="w-full mt-2 pl-1 space-y-1"
+                        >
                             {task.subtasks.map((subtask) => (
-                                <div
+                                <Reorder.Item
                                     key={subtask.id}
-                                    className="flex items-center gap-2 group/sub cursor-pointer hover:bg-gray-50/50 dark:hover:bg-gray-800/50 rounded py-0.5"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onClick();
-                                        // Toggle check logic
-                                        const newSubtasks = task.subtasks!.map(s =>
-                                            s.id === subtask.id ? { ...s, completed: !s.completed } : s
-                                        );
-                                        updateTask(task.id, { subtasks: newSubtasks });
-                                        onTaskChange();
-                                    }}
+                                    value={subtask}
+                                    className="flex items-center gap-2 group/sub py-1.5 px-2 bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-100 dark:border-gray-700"
                                 >
+                                    <div
+                                        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <GripVertical className="w-3 h-3" />
+                                    </div>
                                     <Checkbox
                                         checked={subtask.completed}
-                                        onCheckedChange={() => { }} // Handled by div click
-                                        className="h-3.5 w-3.5 rounded-full border-2 data-[state=checked]:!bg-gray-400 data-[state=checked]:!border-gray-400 pointer-events-none"
+                                        onCheckedChange={() => {
+                                            const newSubtasks = task.subtasks!.map(s =>
+                                                s.id === subtask.id ? { ...s, completed: !s.completed } : s
+                                            );
+                                            updateTask(task.id, { subtasks: newSubtasks });
+                                            onTaskChange();
+                                        }}
+                                        className="h-3.5 w-3.5 rounded-full border-2 data-[state=checked]:!bg-gray-400 data-[state=checked]:!border-gray-400"
+                                        onClick={(e) => e.stopPropagation()}
                                     />
-                                    <span className={`text-xs ${subtask.completed ? 'line-through text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                                    <span
+                                        className={`flex-1 text-xs cursor-pointer ${subtask.completed ? 'line-through text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}
+                                        onDoubleClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartEditSubtask(subtask);
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
                                         {subtask.title}
                                     </span>
-                                </div>
+                                    {subtask.url && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(subtask.url!);
+                                                if (!e.ctrlKey && !e.metaKey) {
+                                                    window.open(subtask.url, '_blank');
+                                                }
+                                            }}
+                                            className="p-0.5 hover:bg-blue-100 dark:hover:bg-blue-900 rounded transition-colors"
+                                            title="클릭: URL 열기 + 복사 / Ctrl+클릭: 복사만"
+                                        >
+                                            <Paperclip className="w-3 h-3 text-blue-500" />
+                                        </button>
+                                    )}
+                                </Reorder.Item>
                             ))}
-                        </div>
+                        </Reorder.Group>
                     )}
                 </div>
 
@@ -417,6 +493,53 @@ function AnimatedTaskItem({
                     </Button>
                 </div>
             </Reorder.Item>
+
+            {/* Subtask Edit Dialog */}
+            <Dialog open={editingSubtaskId !== null} onOpenChange={(open) => !open && handleCancelEditSubtask()}>
+                <DialogContent
+                    className="sm:max-w-[350px]"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                >
+                    <DialogHeader>
+                        <DialogTitle>체크리스트 항목 편집</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <div>
+                            <label className="text-xs text-gray-500 dark:text-gray-400">제목</label>
+                            <Input
+                                value={editingSubtaskTitle}
+                                onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                                onKeyDown={handleSubtaskEditKeyDown}
+                                className="mt-1"
+                                autoFocus
+                                placeholder="항목 제목"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 dark:text-gray-400">URL (선택사항)</label>
+                            <Input
+                                value={editingSubtaskUrl}
+                                onChange={(e) => setEditingSubtaskUrl(e.target.value)}
+                                onKeyDown={handleSubtaskEditKeyDown}
+                                className="mt-1"
+                                placeholder="https://..."
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={handleCancelEditSubtask}>
+                            취소
+                        </Button>
+                        <Button size="sm" onClick={handleSaveEditSubtask}>
+                            저장
+                        </Button>
+                    </DialogFooter>
+                    <p className="text-xs text-gray-400 text-center">
+                        Ctrl+Enter로 저장 / Esc로 취소
+                    </p>
+                </DialogContent>
+            </Dialog>
 
             {/* Delete Confirmation Dialog */}
             <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -888,25 +1011,6 @@ export function TaskList({ category, categories, tasks, onTasksChange, collectio
                             <CalendarDays className="w-4 h-4 mr-1" />
                             오늘
                         </Button>
-                        {/* Search Input */}
-                        <div className="relative">
-                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <Input
-                                ref={searchInputRef}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="검색... (/)"
-                                className="h-8 w-40 pl-8 pr-8 text-sm"
-                            />
-                            {searchQuery && (
-                                <button
-                                    onClick={() => setSearchQuery('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            )}
-                        </div>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm">

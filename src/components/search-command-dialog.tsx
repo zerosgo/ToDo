@@ -337,8 +337,8 @@ export function SearchCommandDialog({
                         placeholder="전체 검색... (할 일, 팀 일정, 메모, 파일)"
                         className="border-none shadow-none focus-visible:ring-0 text-lg bg-transparent px-0 placeholder:text-gray-400"
                     />
-                    <div className="hidden sm:flex items-center gap-1 text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-                        <span>ESC</span> 닫기
+                    <div className="hidden sm:flex items-center text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded mr-8 whitespace-nowrap">
+                        ESC
                     </div>
                 </div>
 

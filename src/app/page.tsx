@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Category, Task } from '@/lib/types';
-import { getCategories, getTasks, addTask, getTheme, setTheme, Theme, getLayoutState, saveLayoutState, getLayoutPreset, saveLayoutPreset, Layout, LayoutState, generateId, addCategory, deleteTask } from '@/lib/storage';
+import { format } from 'date-fns';
+import { getCategories, getTasks, addTask, getTheme, setTheme, Theme, getLayoutState, saveLayoutState, getLayoutPreset, saveLayoutPreset, Layout, LayoutState, generateId, addCategory, deleteTask, updateTask, addNote, updateNote } from '@/lib/storage';
 import { Sidebar } from '@/components/sidebar';
 import { TaskList } from '@/components/task-list';
 import { CalendarView } from '@/components/calendar-view';
@@ -13,6 +14,7 @@ import { ImportExportDialog } from '@/components/import-export-dialog';
 import { ScheduleImportDialog } from '@/components/schedule-import-dialog';
 import { TeamScheduleAddModal } from '@/components/team-schedule-add-modal';
 import { SearchCommandDialog } from '@/components/search-command-dialog';
+
 import { ParsedSchedule, parseScheduleText } from '@/lib/schedule-parser';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeft, Sun, Moon } from 'lucide-react';
@@ -275,15 +277,19 @@ export default function Home() {
 
   const handleTasksChange = () => {
     loadTasks();
+    setNotesVersion(prev => prev + 1);
+  };
+
+  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+    import('@/lib/storage').then(({ updateTask }) => {
+      updateTask(taskId, updates);
+      handleTasksChange();
+    });
   };
 
   const handleDataChange = () => {
-    const cats = loadCategories();
-    if (cats.length > 0) {
-      setSelectedCategoryIds([cats[0].id]);
-    } else {
-      setSelectedCategoryIds([]);
-    }
+    // Force reload to apply all imported settings (Theme, Layout, Notes, etc.)
+    window.location.reload();
   };
 
   const handleDateClick = (date: Date) => {
@@ -394,36 +400,131 @@ export default function Home() {
       scheduleCategory = addCategory('팀 일정');
     }
 
-    // 2. Clear existing tasks in the Team Schedule category (Overwrite Strategy)
+    // 2. Clear existing tasks in the Team Schedule category (Smart Overwrite Strategy)
+    // Identify which months are included in the new schedules
+    const targetMonths = new Set<string>();
+    schedules.forEach(s => {
+      // Format: "YYYY-MM"
+      const yearMonth = `${s.date.getFullYear()}-${s.date.getMonth()}`;
+      targetMonths.add(yearMonth);
+    });
+
+    // Backup map to preserve user data: Key = "YYYY-MM-DD|Title"
+    // We strive to keep: resourceUrl, notes, tags, isPinned
+    const backupMap = new Map<string, Partial<Task>>();
+
     const existingTasks = getTasks(scheduleCategory.id);
-    existingTasks.forEach(t => deleteTask(t.id));
+    existingTasks.forEach(t => {
+      if (t.dueDate) {
+        const taskDate = new Date(t.dueDate);
+        const taskYearMonth = `${taskDate.getFullYear()}-${taskDate.getMonth()}`;
+
+        // Only delete tasks that belong to the months we are about to update
+        if (targetMonths.has(taskYearMonth)) {
+          // Create backup key
+          const dateStr = format(taskDate, 'yyyy-MM-dd');
+          // We use Title matching. Note: Schedule parser trims titles.
+          // Ideally we match by Title + Date. Time might change slightly or formatting differences.
+          // But strict matching (Date + Title) is a good baseline.
+          const key = `${dateStr}|${t.title.trim()}`;
+
+          backupMap.set(key, {
+            resourceUrl: t.resourceUrl,
+            notes: t.notes,
+            tags: t.tags,
+            isPinned: t.isPinned,
+            completed: t.completed // Keep completion status too if desired? User didn't ask but good to have.
+          });
+
+          deleteTask(t.id);
+        }
+      }
+    });
 
     // 3. Add new tasks
     schedules.forEach(schedule => {
       if (!scheduleCategory) return;
 
+      // Check if we have backup data for this item
+      const dateStr = format(schedule.date, 'yyyy-MM-dd');
+      const key = `${dateStr}|${schedule.title.trim()}`;
+      const backup = backupMap.get(key);
+
       // Use addTask helper which handles ID generation
-      addTask(
+      const newTask = addTask(
         scheduleCategory.id,
         schedule.title,
         schedule.date.toISOString(),
         {
           dueTime: schedule.time,
           highlightLevel: schedule.highlightLevel,
-          organizer: schedule.organizer // Add parsing result
+          organizer: schedule.organizer
         }
       );
+
+      // Restore user data if backup exists
+      if (backup) {
+        updateTask(newTask.id, {
+          resourceUrl: backup.resourceUrl,
+          notes: backup.notes,
+          tags: backup.tags,
+          isPinned: backup.isPinned,
+          completed: backup.completed
+        });
+        // Remove from backup map to mark as handled
+        backupMap.delete(key);
+      }
     });
 
-    // 4. Reload
+    // 4. Handle Orphaned Data (Save to Keep)
+    // Any items remaining in backupMap were deleted but not matched to a new schedule.
+    // Save their valuable data (notes, URL) to Keep.
+    let orphanedCount = 0;
+    if (backupMap.size > 0) {
+      backupMap.forEach((data, key) => {
+        // Only save if there is actually data to preserve (URL, Notes, or Tags)
+        if (data.resourceUrl || data.notes || (data.tags && data.tags.length > 0)) {
+          const [dateStr, title] = key.split('|');
+          let noteContent = `[자동백업] ${dateStr} ${title}\n\n`;
+
+          if (data.resourceUrl) noteContent += `🔗 자료: ${data.resourceUrl}\n`;
+          if (data.tags && data.tags.length > 0) noteContent += `🏷️ 태그: ${data.tags.join(', ')}\n`;
+          if (data.notes) noteContent += `📝 메모:\n${data.notes}`;
+
+          // Save to Keep and Pin it for easy access (Sidebar)
+          const newNote = addNote(noteContent, 'yellow');
+          // We need to pin it so it shows up in the sidebar for easy Drag & Drop
+          // Use synchronous update to ensure state is ready before setNotesVersion triggers re-render
+          updateNote(newNote.id, { isPinned: true });
+
+          orphanedCount++;
+        }
+      });
+    }
+
+    // 5. Reload
     loadCategories();
     loadTasks();
+    setNotesVersion(prev => prev + 1);
 
-    // 5. Ensure the schedule category is selected so user sees it immediately
+    // 6. Ensure the schedule category is selected so user sees it immediately
     if (scheduleCategory && !selectedCategoryIds.includes(scheduleCategory.id)) {
       setSelectedCategoryIds(prev => [...prev, scheduleCategory!.id]);
     }
-  }, [categories, selectedCategoryIds, loadCategories, loadTasks]);
+
+    // 7. Notification and Navigation
+    // Use setTimeout to allow UI updates to flush first
+    setTimeout(() => {
+      if (orphanedCount > 0) {
+        const message = `총 ${schedules.length}개의 일정이 업데이트되었습니다.\n\n⚠️ ${orphanedCount}개의 변경된 일정 데이터가 [보관함(Keep)]에 안전하게 백업되었습니다.\n\n지금 보관함으로 이동하여 확인하시겠습니까?`;
+        if (window.confirm(message)) {
+          setViewMode('keep');
+        }
+      } else {
+        window.alert(`총 ${schedules.length}개의 일정이 성공적으로 업데이트되었습니다.`);
+      }
+    }, 100);
+  }, [categories, selectedCategoryIds, loadCategories, loadTasks, setViewMode]);
 
   // Listen for 'SCHEDULE_SYNC' messages from Chrome Extension
   useEffect(() => {
@@ -516,8 +617,6 @@ export default function Home() {
                     setCurrentMonth(date);
                   }}
                   onImportSchedule={() => setIsScheduleImportOpen(true)}
-                  onSearchClick={() => setIsSearchOpen(true)}
-
                   onPinnedMemoClick={(noteId) => {
                     setViewMode('keep');
                     if (noteId) {
@@ -525,8 +624,6 @@ export default function Home() {
                     }
                   }}
                   notesVersion={notesVersion}
-                  viewMode={viewMode}
-                  onViewModeChange={setViewMode}
                 />
 
               </motion.div>
@@ -598,7 +695,7 @@ export default function Home() {
                 onNoteSelected={() => setSelectedNoteId(null)}
                 onNotesChange={() => setNotesVersion(v => v + 1)}
               />
-            ) : (
+            ) : viewMode === 'favorites' ? (
               <FavoritesView
                 categories={categories}
                 onTaskClick={(task) => setDetailTask(task)}
@@ -612,7 +709,7 @@ export default function Home() {
                   setIsTeamScheduleModalOpen(true);
                 }}
               />
-            )}
+            ) : null}
           </div>
         );
 

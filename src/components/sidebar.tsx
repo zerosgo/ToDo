@@ -37,7 +37,6 @@ import {
     GripVertical,
     Pin,
     Star,
-    Search,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -56,9 +55,6 @@ interface SidebarProps {
     onDateSelect: (date: Date) => void;
     onPinnedMemoClick?: (noteId: string) => void;
     notesVersion?: number;
-    viewMode: 'calendar' | 'keep' | 'favorites';
-    onViewModeChange: (mode: 'calendar' | 'keep' | 'favorites') => void;
-    onSearchClick: () => void;
 }
 
 export function Sidebar({
@@ -76,9 +72,6 @@ export function Sidebar({
     onDateSelect,
     onPinnedMemoClick,
     notesVersion,
-    viewMode,
-    onViewModeChange,
-    onSearchClick,
 }: SidebarProps) {
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -316,49 +309,33 @@ export function Sidebar({
                     <span className="text-lg font-semibold">Local Tasks</span>
                 </div>
 
-                <Button
-                    variant="outline"
-                    className="w-full justify-between text-gray-400 font-normal hover:text-gray-900 dark:hover:text-gray-200 mb-2 h-9 border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
-                    onClick={onSearchClick}
+                {/* Collapsible Mini Calendar */}
+                <button
+                    onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
+                    className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-2 w-full"
                 >
-                    <span className="flex items-center gap-2 text-xs">
-                        <Search className="w-3.5 h-3.5" />
-                        검색...
-                    </span>
-                    <span className="text-[10px] bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-400">Ctrl K</span>
-                </Button>
-
-                {/* Collapsible Mini Calendar - Only in Calendar Mode */}
-                {viewMode === 'calendar' && (
-                    <>
-                        <button
-                            onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
-                            className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-2 w-full"
+                    {isCalendarExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    <span>📅 미니 캘린더</span>
+                </button>
+                <AnimatePresence>
+                    {isCalendarExpanded && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
                         >
-                            {isCalendarExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                            <span>📅 미니 캘린더</span>
-                        </button>
-                        <AnimatePresence>
-                            {isCalendarExpanded && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: "auto", opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden"
-                                >
-                                    <MiniCalendar
-                                        currentMonth={currentMonth}
-                                        selectedDate={selectedDate}
-                                        tasks={tasks}
-                                        onMonthChange={onMonthChange}
-                                        onDateSelect={onDateSelect}
-                                    />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </>
-                )}
+                            <MiniCalendar
+                                currentMonth={currentMonth}
+                                selectedDate={selectedDate}
+                                tasks={tasks}
+                                onMonthChange={onMonthChange}
+                                onDateSelect={onDateSelect}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Categories List */}
@@ -416,6 +393,84 @@ export function Sidebar({
                         </div>
                     ))}
                 </div>
+
+                {/* Pinned Memos Section */}
+                {pinnedNotes.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gray-200">
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            onClick={() => setIsPinnedMemosExpanded(!isPinnedMemosExpanded)}
+                        >
+                            <span className="flex items-center gap-2">
+                                <Pin className="w-4 h-4" />
+                                고정 메모 ({pinnedNotes.length})
+                            </span>
+                            {isPinnedMemosExpanded ? (
+                                <ChevronDown className="w-4 h-4" />
+                            ) : (
+                                <ChevronRight className="w-4 h-4" />
+                            )}
+                        </button>
+                        <AnimatePresence>
+                            {isPinnedMemosExpanded && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden px-2"
+                                >
+                                    {pinnedNotes.slice(0, 5).map((note) => (
+                                        <div
+                                            key={note.id}
+                                            draggable
+                                            onDragStart={(e) => {
+                                                e.dataTransfer.setData('note-id', note.id);
+                                                e.dataTransfer.effectAllowed = 'copy';
+                                            }}
+                                            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 cursor-grab active:cursor-grabbing transition-colors"
+                                        >
+                                            <div
+                                                className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-300 cursor-pointer"
+                                                style={{ backgroundColor: note.color }}
+                                                onClick={() => onPinnedMemoClick?.(note.id)}
+                                                title="메모 보기"
+                                            />
+                                            <span
+                                                className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 cursor-pointer hover:underline"
+                                                onClick={() => onPinnedMemoClick?.(note.id)}
+                                                title="메모 보기"
+                                            >
+                                                {note.title || '제목 없음'}
+                                            </span>
+                                            <button
+                                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded z-10"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    if (window.confirm('이 메모를 삭제하시겠습니까?')) {
+                                                        deleteNote(note.id);
+                                                        loadPinnedNotes();
+                                                    }
+                                                }}
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {pinnedNotes.length > 5 && (
+                                        <button
+                                            className="w-full text-xs text-blue-500 hover:text-blue-600 py-1.5 text-center"
+                                            onClick={() => onPinnedMemoClick?.('')}
+                                        >
+                                            +{pinnedNotes.length - 5} 더보기
+                                        </button>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                )}
 
                 {/* Quick Links Section */}
                 <div className="mt-4 pt-3 border-t border-gray-200">
@@ -530,73 +585,7 @@ export function Sidebar({
                     </AnimatePresence>
                 </div>
 
-                {/* Pinned Memos Section */}
-                {pinnedNotes.length > 0 && (
-                    <div className="mb-2">
-                        <button
-                            className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            onClick={() => setIsPinnedMemosExpanded(!isPinnedMemosExpanded)}
-                        >
-                            <span className="flex items-center gap-2">
-                                <Pin className="w-4 h-4" />
-                                고정 메모 ({pinnedNotes.length})
-                            </span>
-                            {isPinnedMemosExpanded ? (
-                                <ChevronDown className="w-4 h-4" />
-                            ) : (
-                                <ChevronRight className="w-4 h-4" />
-                            )}
-                        </button>
-                        <AnimatePresence>
-                            {isPinnedMemosExpanded && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden px-2"
-                                >
-                                    {pinnedNotes.slice(0, 5).map((note) => (
-                                        <div
-                                            key={note.id}
-                                            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                                            onClick={() => onPinnedMemoClick?.(note.id)}
-                                        >
-                                            <div
-                                                className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-300"
-                                                style={{ backgroundColor: note.color }}
-                                            />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">
-                                                {note.title || '제목 없음'}
-                                            </span>
-                                            <button
-                                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded z-10"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    if (window.confirm('이 메모를 삭제하시겠습니까?')) {
-                                                        deleteNote(note.id);
-                                                        loadPinnedNotes();
-                                                    }
-                                                }}
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {pinnedNotes.length > 5 && (
-                                        <button
-                                            className="w-full text-xs text-blue-500 hover:text-blue-600 py-1.5 text-center"
-                                            onClick={() => onPinnedMemoClick?.('')}
-                                        >
-                                            +{pinnedNotes.length - 5} 더보기
-                                        </button>
-                                    )}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                )}
+
             </ScrollArea >
 
             {/* Footer Actions */}

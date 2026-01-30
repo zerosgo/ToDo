@@ -11,6 +11,7 @@ export interface Subtask {
     id: string;
     title: string;
     completed: boolean;
+    url?: string; // Optional URL attachment
 }
 
 export interface Task {

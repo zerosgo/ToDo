@@ -213,12 +213,29 @@ export function sortTasksByDate(categoryId: string): void {
     saveData(data);
 }
 
-// Export data as JSON (includes all data: tasks, categories, quickLinks, theme)
+// Export data as JSON (includes all data including notes, settings, layout)
 export function exportData(): string {
     const data = getData();
     const quickLinks = getQuickLinks();
+    const notes = getNotes();
     const theme = getTheme();
-    return JSON.stringify({ data, quickLinks, theme }, null, 2);
+    const layoutState = getLayoutState();
+    const layoutPresets = getAllLayoutPresets();
+
+    // Calendar settings (read directly from localStorage as it's not managed fully in storage.ts)
+    const calendarSettings = typeof window !== 'undefined' ? localStorage.getItem('calendar-settings') : null;
+
+    return JSON.stringify({
+        version: 2,
+        timestamp: new Date().toISOString(),
+        data,
+        quickLinks,
+        notes,
+        theme,
+        layoutState,
+        layoutPresets,
+        calendarSettings: calendarSettings ? JSON.parse(calendarSettings) : null
+    }, null, 2);
 }
 
 // Import data from JSON
@@ -226,25 +243,47 @@ export function importData(jsonString: string): boolean {
     try {
         const parsed = JSON.parse(jsonString);
 
-        // Handle new format with nested data
+        if (typeof window === 'undefined') return false;
+
+        // 1. Core Data (Tasks & Categories)
         if (parsed.data && parsed.data.categories) {
             saveData(parsed.data);
-            if (parsed.quickLinks) {
-                saveQuickLinks(parsed.quickLinks);
-            }
-            if (parsed.theme) {
-                setTheme(parsed.theme);
-            }
-            return true;
-        }
-
-        // Handle old format (direct categories/tasks)
-        if (Array.isArray(parsed.categories) && Array.isArray(parsed.tasks)) {
+        } else if (Array.isArray(parsed.categories) && Array.isArray(parsed.tasks)) {
+            // Legacy format support
             saveData(parsed as AppData);
-            return true;
         }
 
-        throw new Error('Invalid data structure');
+        // 2. Quick Links
+        if (parsed.quickLinks) {
+            saveQuickLinks(parsed.quickLinks);
+        }
+
+        // 3. Notes (Keep)
+        if (parsed.notes) {
+            saveNotes(parsed.notes);
+        }
+
+        // 4. Theme
+        if (parsed.theme) {
+            setTheme(parsed.theme);
+        }
+
+        // 5. Layout State
+        if (parsed.layoutState) {
+            localStorage.setItem(LAYOUT_STATE_KEY, JSON.stringify(parsed.layoutState));
+        }
+
+        // 6. Layout Presets
+        if (parsed.layoutPresets) {
+            localStorage.setItem(LAYOUT_PRESETS_KEY, JSON.stringify(parsed.layoutPresets));
+        }
+
+        // 7. Calendar Settings
+        if (parsed.calendarSettings) {
+            localStorage.setItem('calendar-settings', JSON.stringify(parsed.calendarSettings));
+        }
+
+        return true;
     } catch (error) {
         console.error('Import failed:', error);
         return false;

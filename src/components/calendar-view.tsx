@@ -296,6 +296,80 @@ export function CalendarView({
         setDraggedTaskId(null);
     };
 
+    const handleTaskDrop = async (e: React.DragEvent, targetTask: Task) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const noteId = e.dataTransfer.getData('note-id');
+        if (!noteId) return;
+
+        // Import storage dynamically
+        const { getNotes, updateTask, deleteNote } = await import('@/lib/storage');
+        const notes = getNotes();
+        const note = notes.find(n => n.id === noteId);
+
+        if (note) {
+            // Confirm merge
+            if (window.confirm(`'${note.title || '메모'}' 내용을 '${targetTask.title}' 일정에 병합하시겠습니까?\n\n(병합 후 원본 메모는 삭제됩니다)`)) {
+
+                // Helper to strip HTML
+                // Helper to strip HTML with newline preservation
+                const stripHtml = (html: string) => {
+                    const withNewlines = html.replace(/<\/?(div|p|br|li)[^>]*>/gi, '\n');
+                    try {
+                        const doc = new DOMParser().parseFromString(withNewlines, 'text/html');
+                        return doc.body.textContent || "";
+                    } catch (e) {
+                        return withNewlines.replace(/<[^>]*>?/gm, ''); // Fallback
+                    }
+                };
+
+                const cleanContent = stripHtml(note.content || '');
+
+                // Extract URL (prioritize generic URL extraction)
+                let newUrl = targetTask.resourceUrl;
+                if (!newUrl) {
+                    // Try exact match first
+                    const urlRegex = /(https?:\/\/[^\s"'>]+)/g;
+                    const matches = cleanContent.match(urlRegex);
+                    if (matches && matches.length > 0) {
+                        newUrl = matches[0];
+                    }
+                }
+
+                // Append content to notes (preserve original HTML formatting if possible, or just text)
+                // For simplicity and safety, we append raw HTML from note, assuming Task notes support it or it's plain text.
+                // If Task notes are plain text, we should use cleanContent.
+                // Assuming Task.notes is string (often plain text or Markdown-like).
+                // Let's use cleanContent to avoid messy HTML in task notes.
+                const newNotes = (targetTask.notes ? targetTask.notes + '\n\n' : '') +
+                    '--- [Imported Note] ---\n' +
+                    cleanContent;
+
+                // Extract Tags
+                let newTags = targetTask.tags || [];
+                const tagMatch = cleanContent.match(/🏷️ 태그: (.*)/);
+                if (tagMatch) {
+                    const extractedTags = tagMatch[1].split(',').map(t => t.trim()).filter(t => t);
+                    newTags = Array.from(new Set([...newTags, ...extractedTags]));
+                }
+
+                // Update Task
+                updateTask(targetTask.id, {
+                    notes: newNotes,
+                    resourceUrl: newUrl,
+                    tags: newTags
+                });
+
+                // Delete the dropped note (Move operation)
+                deleteNote(noteId);
+
+                // Trigger data refresh
+                onDataChange?.();
+            }
+        }
+    };
+
     const handleDeleteConfirm = () => {
         if (deleteTaskToConfirm) {
             import('@/lib/storage').then(({ deleteTask }) => {
@@ -389,14 +463,6 @@ export function CalendarView({
                         title="스타일 설정"
                     >
                         <Settings className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={() => setIsSearchModalOpen(true)}
-                        className="px-3 py-1 text-sm font-medium rounded transition-colors bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1"
-                        title="팀 일정 검색 (Ctrl+/)"
-                    >
-                        <Search className="w-4 h-4" />
-                        검색
                     </button>
                 </div>
             </div>
@@ -806,6 +872,11 @@ export function CalendarView({
                                                                         setEditingScheduleTask(task);
                                                                         setIsTeamScheduleModalOpen(true);
                                                                     }}
+                                                                    onDragOver={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                    }}
+                                                                    onDrop={(e) => handleTaskDrop(e, task)}
                                                                     title={task.organizer || `${task.title}${task.dueTime ? ` (${task.dueTime})` : ''} ${isActive ? '[진행 중]' : ''}`}
                                                                 >
                                                                     <div className="truncate w-full min-w-0 flex items-center gap-1">

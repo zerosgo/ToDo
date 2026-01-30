@@ -20,10 +20,10 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { CalendarIcon, X, Link, Tag, Maximize2, Plus, Check, Trash2, ListChecks, Star } from 'lucide-react';
+import { CalendarIcon, X, Link, Tag, Maximize2, Plus, Check, Trash2, ListChecks, Star, GripVertical, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 
 interface TaskDetailDialogProps {
     task: Task | null;
@@ -60,6 +60,9 @@ export function TaskDetailDialog({
     const [subtasks, setSubtasks] = useState<Subtask[]>([]);
     const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
     const [isCollectionTask, setIsCollectionTask] = useState(false);
+    const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+    const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
+    const [editingSubtaskUrl, setEditingSubtaskUrl] = useState('');
 
     // Get existing tags for autocomplete (excluding already added tags)
     const tagSuggestions = React.useMemo(() => {
@@ -302,6 +305,52 @@ export function TaskDetailDialog({
         }
     };
 
+    // Subtask edit handlers
+    const handleStartEditSubtask = (subtask: Subtask) => {
+        setEditingSubtaskId(subtask.id);
+        setEditingSubtaskTitle(subtask.title);
+        setEditingSubtaskUrl(subtask.url || '');
+    };
+
+    const handleSaveEditSubtask = () => {
+        if (editingSubtaskId && editingSubtaskTitle.trim()) {
+            setSubtasks(subtasks.map(s =>
+                s.id === editingSubtaskId
+                    ? { ...s, title: editingSubtaskTitle.trim(), url: editingSubtaskUrl.trim() || undefined }
+                    : s
+            ));
+        }
+        setEditingSubtaskId(null);
+        setEditingSubtaskTitle('');
+        setEditingSubtaskUrl('');
+    };
+
+    const handleCancelEditSubtask = () => {
+        setEditingSubtaskId(null);
+        setEditingSubtaskTitle('');
+        setEditingSubtaskUrl('');
+    };
+
+    const handleSubtaskEditKeyDown = (e: React.KeyboardEvent) => {
+        // Ctrl+Enter: Save and close
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            handleSaveEditSubtask();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancelEditSubtask();
+        }
+        // Tab works normally for field navigation
+    };
+
+    const handleClipClick = (url: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(url);
+        if (!e.ctrlKey && !e.metaKey) {
+            window.open(url, '_blank');
+        }
+    };
+
     const handleAddUrl = () => {
         setResourceUrls([...resourceUrls, '']);
     };
@@ -350,47 +399,35 @@ export function TaskDetailDialog({
 
                     <div className="space-y-4">
                         {/* Title */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700">제목</label>
+                        <div className="flex items-center gap-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 flex-shrink-0">제목</label>
                             <Input
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="할 일 제목"
-                                className="mt-1"
+                                className="flex-1"
                                 tabIndex={1}
                                 onKeyDown={handleKeyDown}
                             />
                         </div>
 
                         {/* Assignee */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700">담당자</label>
+                        <div className="flex items-center gap-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 flex-shrink-0">담당자</label>
                             <Input
                                 value={assignee}
                                 onChange={(e) => setAssignee(e.target.value)}
                                 placeholder="담당자 이름 또는 부서"
-                                className="mt-1"
+                                className="flex-1"
                                 tabIndex={2}
                                 onKeyDown={handleKeyDown}
                             />
                         </div>
 
                         {/* Resource URL */}
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-700">자료</label>
-
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleAddUrl}
-                                    className="h-6 px-2 text-xs text-blue-600 hover:bg-blue-50"
-                                >
-                                    <Plus className="w-3 h-3 mr-1" /> 추가
-                                </Button>
-                            </div>
-                            <div className="space-y-2 mt-1">
+                        <div className="flex items-start gap-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 flex-shrink-0 pt-2">자료</label>
+                            <div className="flex-1 space-y-2">
                                 {resourceUrls.map((url, index) => (
                                     <div key={index} className="flex items-center gap-2">
                                         <Input
@@ -425,13 +462,22 @@ export function TaskDetailDialog({
                                         </Button>
                                     </div>
                                 ))}
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleAddUrl}
+                                    className="h-6 px-2 text-xs text-blue-600 hover:bg-blue-50"
+                                >
+                                    <Plus className="w-3 h-3 mr-1" /> 추가
+                                </Button>
                             </div>
                         </div>
 
                         {/* Due Date & Time */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700">마감 기한</label>
-                            <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 flex-shrink-0">마감기한</label>
+                            <div className="flex items-center gap-2 flex-1">
                                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                                     <PopoverTrigger asChild>
                                         <Button
@@ -521,12 +567,9 @@ export function TaskDetailDialog({
                         </div>
 
                         {/* Tags */}
-                        <div>
-                            <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                                <Tag className="w-3.5 h-3.5" />
-                                태그
-                            </label>
-                            <div className="flex flex-wrap gap-1.5 mt-1">
+                        <div className="flex items-start gap-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 flex-shrink-0 pt-1">태그</label>
+                            <div className="flex flex-wrap gap-1.5 flex-1">
                                 {tags.map((tag) => (
                                     <span
                                         key={tag}
@@ -640,12 +683,21 @@ export function TaskDetailDialog({
                             )}
 
                             {/* Subtask list */}
-                            <div className="mt-2 space-y-1 max-h-[120px] overflow-y-auto">
+                            <Reorder.Group
+                                axis="y"
+                                values={subtasks}
+                                onReorder={setSubtasks}
+                                className="mt-2 space-y-1 max-h-[150px] overflow-y-auto"
+                            >
                                 {subtasks.map((subtask) => (
-                                    <div
+                                    <Reorder.Item
                                         key={subtask.id}
-                                        className="flex items-center gap-2 group py-0.5"
+                                        value={subtask}
+                                        className="flex items-center gap-2 group py-1.5 px-2 bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-100 dark:border-gray-700"
                                     >
+                                        <div className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400">
+                                            <GripVertical className="w-3 h-3" />
+                                        </div>
                                         <button
                                             type="button"
                                             onClick={() => handleToggleSubtask(subtask.id)}
@@ -656,12 +708,31 @@ export function TaskDetailDialog({
                                         >
                                             {subtask.completed && <Check className="w-3 h-3" />}
                                         </button>
-                                        <span className={`flex-1 text-sm ${subtask.completed
-                                            ? 'text-gray-400 line-through'
-                                            : 'text-gray-700 dark:text-gray-300'
-                                            }`}>
+
+                                        {/* Title - double click to edit */}
+                                        <span
+                                            className={`flex-1 text-sm cursor-pointer ${subtask.completed
+                                                ? 'text-gray-400 line-through'
+                                                : 'text-gray-700 dark:text-gray-300'
+                                                }`}
+                                            onDoubleClick={() => handleStartEditSubtask(subtask)}
+                                            title="더블클릭하여 편집"
+                                        >
                                             {subtask.title}
                                         </span>
+
+                                        {/* URL clip icon */}
+                                        {subtask.url && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleClipClick(subtask.url!, e)}
+                                                className="p-0.5 hover:bg-blue-100 dark:hover:bg-blue-900 rounded transition-colors"
+                                                title="클릭: URL 열기 + 복사 / Ctrl+클릭: 복사만"
+                                            >
+                                                <Paperclip className="w-3 h-3 text-blue-500" />
+                                            </button>
+                                        )}
+
                                         <button
                                             type="button"
                                             onClick={() => handleDeleteSubtask(subtask.id)}
@@ -669,9 +740,9 @@ export function TaskDetailDialog({
                                         >
                                             <Trash2 className="w-3 h-3 text-red-500" />
                                         </button>
-                                    </div>
+                                    </Reorder.Item>
                                 ))}
-                            </div>
+                            </Reorder.Group>
 
                             {/* Add new subtask */}
                             <div className="flex items-center gap-2 mt-2">
@@ -714,7 +785,7 @@ export function TaskDetailDialog({
                             </div>
                             {/* Rich Text Editor for Notes */}
                             {/* Rich Text Editor for Notes */}
-                            <div className="relative mt-1 w-full min-h-[100px] max-h-[150px] overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                            <div className="relative mt-1 w-full min-h-[70px] max-h-[100px] overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
                                 <style jsx global>{`
                                     .rich-text-editor table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
                                     .rich-text-editor td, .rich-text-editor th { border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: top; text-align: left; }
@@ -840,6 +911,49 @@ export function TaskDetailDialog({
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Subtask Edit Dialog - using Radix Dialog */}
+            <Dialog open={editingSubtaskId !== null} onOpenChange={(open) => !open && handleCancelEditSubtask()}>
+                <DialogContent className="sm:max-w-[350px]">
+                    <DialogHeader>
+                        <DialogTitle>체크리스트 항목 편집</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <div>
+                            <label className="text-xs text-gray-500 dark:text-gray-400">제목</label>
+                            <Input
+                                value={editingSubtaskTitle}
+                                onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                                onKeyDown={handleSubtaskEditKeyDown}
+                                className="mt-1"
+                                autoFocus
+                                placeholder="항목 제목"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 dark:text-gray-400">URL (선택사항)</label>
+                            <Input
+                                value={editingSubtaskUrl}
+                                onChange={(e) => setEditingSubtaskUrl(e.target.value)}
+                                onKeyDown={handleSubtaskEditKeyDown}
+                                className="mt-1"
+                                placeholder="https://..."
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={handleCancelEditSubtask}>
+                            취소
+                        </Button>
+                        <Button size="sm" onClick={handleSaveEditSubtask}>
+                            저장
+                        </Button>
+                    </DialogFooter>
+                    <p className="text-xs text-gray-400 text-center">
+                        Ctrl+Enter로 저장 / Esc로 취소
+                    </p>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
