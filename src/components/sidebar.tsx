@@ -81,6 +81,7 @@ export function Sidebar({
 
     const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
     const [showCopyToast, setShowCopyToast] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
 
     const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url);
@@ -425,20 +426,24 @@ export function Sidebar({
                                             key={note.id}
                                             draggable
                                             onDragStart={(e) => {
+                                                setIsDragging(true);
                                                 e.dataTransfer.setData('note-id', note.id);
                                                 e.dataTransfer.effectAllowed = 'copy';
+                                            }}
+                                            onDragEnd={() => {
+                                                setTimeout(() => setIsDragging(false), 100);
                                             }}
                                             className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 cursor-grab active:cursor-grabbing transition-colors"
                                         >
                                             <div
                                                 className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-300 cursor-pointer"
                                                 style={{ backgroundColor: note.color }}
-                                                onClick={() => onPinnedMemoClick?.(note.id)}
+                                                onClick={() => !isDragging && onPinnedMemoClick?.(note.id)}
                                                 title="메모 보기"
                                             />
                                             <span
                                                 className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 cursor-pointer hover:underline"
-                                                onClick={() => onPinnedMemoClick?.(note.id)}
+                                                onClick={() => !isDragging && onPinnedMemoClick?.(note.id)}
                                                 title="메모 보기"
                                             >
                                                 {note.title || '제목 없음'}

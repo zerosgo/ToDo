@@ -355,17 +355,26 @@ export function CalendarView({
                 }
 
                 // Update Task
-                updateTask(targetTask.id, {
+                const result = updateTask(targetTask.id, {
                     notes: newNotes,
                     resourceUrl: newUrl,
                     tags: newTags
                 });
 
-                // Delete the dropped note (Move operation)
-                deleteNote(noteId);
+                if (result) {
+                    // Delete the dropped note (Move operation)
+                    deleteNote(noteId);
 
-                // Trigger data refresh
-                onDataChange?.();
+                    // Small delay to ensure localStorage is synced, then trigger refresh
+                    setTimeout(() => {
+                        onDataChange?.();
+                    }, 50);
+
+                    // Brief success feedback (optional, can be removed if too intrusive)
+                    // alert('병합 완료!');
+                } else {
+                    alert('일정 업데이트에 실패했습니다. 다시 시도해 주세요.');
+                }
             }
         }
     };
