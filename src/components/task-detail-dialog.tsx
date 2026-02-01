@@ -112,6 +112,7 @@ export function TaskDetailDialog({
                     subtasks,
                     isFavorite,
                     isCollectionTask,
+                    source: 'manual', // Mark as manually created
                 });
             } else {
                 // Update existing task

@@ -35,6 +35,7 @@ export interface Task {
     highlightLevel?: 0 | 1 | 2 | 3; // 0=none, 1=Blue, 2=Green, 3=Purple
     subtasks?: Subtask[]; // Checklist items
     isCollectionTask?: boolean; // 취합 템플릿 적용 여부
+    source?: 'team' | 'manual'; // 일정 출처: team=팀 일정 가져오기, manual=수동 추가 (팀 일정 가져오기 시 보호됨)
 }
 
 export interface AppData {

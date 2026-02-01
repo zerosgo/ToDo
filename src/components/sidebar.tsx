@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Category, Task, CATEGORY_COLORS, QuickLink, Note } from '@/lib/types';
 import { addCategory, updateCategory, deleteCategory, getQuickLinks, addQuickLink, updateQuickLink, deleteQuickLink, reorderQuickLinks, getNotes, deleteNote } from '@/lib/storage';
 import { MiniCalendar } from './mini-calendar';
@@ -82,6 +82,7 @@ export function Sidebar({
     const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
     const [showCopyToast, setShowCopyToast] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const dragStartPos = useRef<{ x: number, y: number } | null>(null);
 
     const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url);
@@ -425,26 +426,40 @@ export function Sidebar({
                                         <div
                                             key={note.id}
                                             draggable
+                                            onMouseDown={(e) => {
+                                                dragStartPos.current = { x: e.clientX, y: e.clientY };
+                                            }}
                                             onDragStart={(e) => {
                                                 setIsDragging(true);
                                                 e.dataTransfer.setData('note-id', note.id);
                                                 e.dataTransfer.effectAllowed = 'copy';
                                             }}
                                             onDragEnd={() => {
-                                                setTimeout(() => setIsDragging(false), 100);
+                                                setTimeout(() => {
+                                                    setIsDragging(false);
+                                                    dragStartPos.current = null;
+                                                }, 150);
+                                            }}
+                                            onMouseUp={(e) => {
+                                                // Check if this was a drag or a click
+                                                if (dragStartPos.current) {
+                                                    const dx = Math.abs(e.clientX - dragStartPos.current.x);
+                                                    const dy = Math.abs(e.clientY - dragStartPos.current.y);
+                                                    // If mouse moved less than 5px, it's a click, not drag
+                                                    if (dx < 5 && dy < 5 && !isDragging) {
+                                                        onPinnedMemoClick?.(note.id);
+                                                    }
+                                                }
+                                                dragStartPos.current = null;
                                             }}
                                             className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 cursor-grab active:cursor-grabbing transition-colors"
                                         >
                                             <div
-                                                className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-300 cursor-pointer"
+                                                className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-300"
                                                 style={{ backgroundColor: note.color }}
-                                                onClick={() => !isDragging && onPinnedMemoClick?.(note.id)}
-                                                title="메모 보기"
                                             />
                                             <span
-                                                className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 cursor-pointer hover:underline"
-                                                onClick={() => !isDragging && onPinnedMemoClick?.(note.id)}
-                                                title="메모 보기"
+                                                className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1"
                                             >
                                                 {note.title || '제목 없음'}
                                             </span>

@@ -134,6 +134,7 @@ export function TeamScheduleAddModal({
                     organizer: organizer.trim() || undefined,
                     resourceUrl: resourceUrl.trim() || undefined,
                     isFavorite,
+                    source: 'manual', // Mark as manually created - protected from team schedule import
                 }
             );
         }

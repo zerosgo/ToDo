@@ -415,6 +415,12 @@ export default function Home() {
 
     const existingTasks = getTasks(scheduleCategory.id);
     existingTasks.forEach(t => {
+      // Only protect tasks explicitly marked as 'manual'
+      // Tasks with source: 'team' or undefined (legacy) will be deleted and re-created
+      if (t.source === 'manual') {
+        return; // Preserve only explicitly manual tasks
+      }
+
       if (t.dueDate) {
         const taskDate = new Date(t.dueDate);
         const taskYearMonth = `${taskDate.getFullYear()}-${taskDate.getMonth()}`;
@@ -458,7 +464,8 @@ export default function Home() {
         {
           dueTime: schedule.time,
           highlightLevel: schedule.highlightLevel,
-          organizer: schedule.organizer
+          organizer: schedule.organizer,
+          source: 'team' // Mark as team schedule import
         }
       );
 
@@ -485,14 +492,16 @@ export default function Home() {
         // Only save if there is actually data to preserve (URL, Notes, or Tags)
         if (data.resourceUrl || data.notes || (data.tags && data.tags.length > 0)) {
           const [dateStr, title] = key.split('|');
-          let noteContent = `[자동백업] ${dateStr} ${title}\n\n`;
-
+          // Build content (without title - title goes to note.title)
+          let noteContent = '';
           if (data.resourceUrl) noteContent += `🔗 자료: ${data.resourceUrl}\n`;
           if (data.tags && data.tags.length > 0) noteContent += `🏷️ 태그: ${data.tags.join(', ')}\n`;
           if (data.notes) noteContent += `📝 메모:\n${data.notes}`;
 
           // Save to Keep and Pin it for easy access (Sidebar)
-          const newNote = addNote(noteContent, 'yellow');
+          // addNote(title, content, color) - use proper parameter order
+          const noteTitle = `[자동백업] ${dateStr} ${title}`;
+          const newNote = addNote(noteTitle, noteContent, 'yellow');
           // We need to pin it so it shows up in the sidebar for easy Drag & Drop
           // Use synchronous update to ensure state is ready before setNotesVersion triggers re-render
           updateNote(newNote.id, { isPinned: true });
@@ -512,14 +521,12 @@ export default function Home() {
       setSelectedCategoryIds(prev => [...prev, scheduleCategory!.id]);
     }
 
-    // 7. Notification and Navigation
+    // 7. Notification (Stay on calendar view)
     // Use setTimeout to allow UI updates to flush first
     setTimeout(() => {
       if (orphanedCount > 0) {
-        const message = `총 ${schedules.length}개의 일정이 업데이트되었습니다.\n\n⚠️ ${orphanedCount}개의 변경된 일정 데이터가 [보관함(Keep)]에 안전하게 백업되었습니다.\n\n지금 보관함으로 이동하여 확인하시겠습니까?`;
-        if (window.confirm(message)) {
-          setViewMode('keep');
-        }
+        // Just notify user, don't switch view - pinned memos are visible in sidebar
+        window.alert(`총 ${schedules.length}개의 일정이 업데이트되었습니다.\n\n⚠️ ${orphanedCount}개의 변경된 일정 데이터가 사이드바 [고정 메모]에 안전하게 백업되었습니다.\n\n사이드바에서 메모를 캘린더 일정 위로 드래그하여 병합할 수 있습니다.`);
       } else {
         window.alert(`총 ${schedules.length}개의 일정이 성공적으로 업데이트되었습니다.`);
       }

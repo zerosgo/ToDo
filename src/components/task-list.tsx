@@ -897,7 +897,7 @@ export function TaskList({ category, categories, tasks, onTasksChange, collectio
 
     const handleAddTask = () => {
         if (category && newTaskTitle.trim()) {
-            addTask(category.id, newTaskTitle.trim());
+            addTask(category.id, newTaskTitle.trim(), null, { source: 'manual' });
             setNewTaskTitle('');
             onTasksChange();
         }

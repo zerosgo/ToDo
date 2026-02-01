@@ -324,16 +324,26 @@ export function CalendarView({
                     }
                 };
 
-                const cleanContent = stripHtml(note.content || '');
+                // Combine title and content for extraction (handles both old and new backup formats)
+                // Old format: content was empty, everything was in title
+                // New format: title is short, content has the data
+                const rawText = (note.title || '') + '\n' + (note.content || '');
+                const cleanContent = stripHtml(rawText);
 
-                // Extract URL (prioritize generic URL extraction)
+                // Extract URL (prioritize backup format, then generic URL)
                 let newUrl = targetTask.resourceUrl;
                 if (!newUrl) {
-                    // Try exact match first
-                    const urlRegex = /(https?:\/\/[^\s"'>]+)/g;
-                    const matches = cleanContent.match(urlRegex);
-                    if (matches && matches.length > 0) {
-                        newUrl = matches[0];
+                    // First try backup format: 🔗 자료: URL
+                    const backupUrlMatch = cleanContent.match(/🔗\s*자료:\s*(https?:\/\/[^\s"'>]+)/);
+                    if (backupUrlMatch) {
+                        newUrl = backupUrlMatch[1];
+                    } else {
+                        // Fallback to generic URL extraction
+                        const urlRegex = /(https?:\/\/[^\s"'>]+)/g;
+                        const matches = cleanContent.match(urlRegex);
+                        if (matches && matches.length > 0) {
+                            newUrl = matches[0];
+                        }
                     }
                 }
 
