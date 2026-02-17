@@ -53,6 +53,34 @@ const DEFAULT_CATEGORY_COLORS: Record<TripCategory, { bg: string; text: string; 
     others: { bg: '#f97316', text: '#ffffff', label: '기타' },
 };
 
+// Destination-specific colors for trip category bars
+const DESTINATION_COLORS: Record<string, string> = {
+    'SDV': '#2563eb',   // blue
+    'SDI': '#0891b2',   // cyan
+    'SDS': '#059669',   // emerald
+    'SMD': '#7c3aed',   // violet
+    'SDSA': '#dc2626',  // red
+    'SDVN': '#ea580c',  // orange
+    'SDSZ': '#d97706',  // amber
+    'SDMS': '#0d9488',  // teal
+    'SDC': '#4f46e5',   // indigo
+    'SIEL': '#be185d',  // pink
+    'SDLA': '#65a30d',  // lime
+    'SDME': '#9333ea',  // purple
+};
+
+/** Hash-based color for unknown destinations */
+function getDestinationColor(dest: string): string {
+    if (DESTINATION_COLORS[dest]) return DESTINATION_COLORS[dest];
+    // Generate a deterministic color from the destination name
+    let hash = 0;
+    for (let i = 0; i < dest.length; i++) {
+        hash = dest.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 65%, 45%)`;
+}
+
 export function TripBoard({ onDataChange }: TripBoardProps) {
     // Load saved Gantt preferences from localStorage
     const savedPrefs = useMemo(() => {
@@ -98,6 +126,7 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
     const [manualDataVersion, setManualDataVersion] = useState(0);
     const [barOpacity, setBarOpacity] = useState(savedPrefs?.barOpacity ?? 0.8);
     const [showSettings, setShowSettings] = useState(false);
+    const [destFilters, setDestFilters] = useState<Record<string, boolean>>(savedPrefs?.destFilters ?? {});
 
     // Custom Category Colors
     const [categoryColors, setCategoryColors] = useState(DEFAULT_CATEGORY_COLORS);
@@ -206,6 +235,29 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
 
     const tripsToDisplay = trips; // Use original trips for rendering (destination overlay applied at display time)
 
+    // Extract unique destinations from matched trips
+    const uniqueDestinations = useMemo(() => {
+        const dests = new Set<string>();
+        destinationMap.forEach(m => { if (m.destination) dests.add(m.destination); });
+        return [...dests].sort();
+    }, [destinationMap]);
+
+    // Initialize dest filters for new destinations (default: all visible)
+    useEffect(() => {
+        if (uniqueDestinations.length === 0) return;
+        setDestFilters(prev => {
+            const updated = { ...prev };
+            let changed = false;
+            uniqueDestinations.forEach(d => {
+                if (!(d in updated)) {
+                    updated[d] = true;
+                    changed = true;
+                }
+            });
+            return changed ? updated : prev;
+        });
+    }, [uniqueDestinations]);
+
 
     // Persist viewMode to localStorage
     useEffect(() => {
@@ -246,10 +298,10 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
         const prefs = {
             dayWidth, ganttStartDate, ganttEndDate, categoryFilters,
             ganttGroupFilter, ganttPartFilter, ganttDeptFilter,
-            activeTab, barOpacity, todayColor
+            activeTab, barOpacity, todayColor, destFilters
         };
         localStorage.setItem('ganttViewPrefs', JSON.stringify(prefs));
-    }, [dayWidth, ganttStartDate, ganttEndDate, categoryFilters, ganttGroupFilter, ganttPartFilter, ganttDeptFilter, activeTab, barOpacity, todayColor]);
+    }, [dayWidth, ganttStartDate, ganttEndDate, categoryFilters, ganttGroupFilter, ganttPartFilter, ganttDeptFilter, activeTab, barOpacity, todayColor, destFilters]);
 
     // UseRef for Gantt Container
     const containerRef = useRef<HTMLDivElement>(null);
@@ -359,7 +411,22 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
     });
 
     // Filter trips by category (used for gantt member filtering and trip grouping)
-    const categoryFilteredTrips = tripsToDisplay.filter(t => categoryFilters[t.category ?? 'trip']);
+    const categoryFilteredTrips = tripsToDisplay.filter(t => {
+        // Category filter
+        if (!categoryFilters[t.category ?? 'trip']) return false;
+
+        // Destination filter (only for trip category)
+        if (t.category === 'trip' || !t.category) {
+            const destMatch = destinationMap.get(t.id);
+            if (destMatch?.destination) {
+                // Has destination → check if that destination is filtered in
+                if (destFilters[destMatch.destination] === false) return false;
+            }
+            // No destination match → always show (not filterable)
+        }
+
+        return true;
+    });
 
     // Build set of members who have ANY trip data (category-filtered, but not date-restricted)
     const membersWithTrips = new Set<string>();
@@ -791,6 +858,27 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
                                         ))}
                                     </div>
 
+                                    {/* Destination Filter Chips (shown when 출장 filter is on and destinations exist) */}
+                                    {categoryFilters.trip && uniqueDestinations.length > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                            <span className="text-[10px] text-gray-400 mr-0.5">출장지:</span>
+                                            {uniqueDestinations.map(dest => (
+                                                <button
+                                                    key={dest}
+                                                    onClick={() => setDestFilters(f => ({ ...f, [dest]: !f[dest] }))}
+                                                    className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-all flex items-center gap-1 ${destFilters[dest] !== false
+                                                        ? 'text-white shadow-sm'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200'
+                                                        }`}
+                                                    style={destFilters[dest] !== false ? { backgroundColor: getDestinationColor(dest) } : {}}
+                                                >
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-white/80"></span>
+                                                    {dest}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
                                     <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
                                         <div className="flex items-center gap-0.5">
                                             <span className="text-gray-400 mr-1">줌:</span>
@@ -1047,9 +1135,11 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
                                                         const rawWidth = durationDays * dayWidth;
                                                         const adjustedWidth = Math.max(dayWidth, rawWidth - clampOffset);
 
-                                                        // Category-based Colors
-                                                        const catColor = categoryColors[trip.category ?? 'trip'];
-                                                        const bgClass = catColor?.bg || '#cbd5e1';
+                                                        // Color: destination-specific for trips, category for others
+                                                        const destMatch = destinationMap.get(trip.id);
+                                                        const barColor = (trip.category === 'trip' || !trip.category) && destMatch?.destination
+                                                            ? getDestinationColor(destMatch.destination)
+                                                            : (categoryColors[trip.category ?? 'trip']?.bg || '#cbd5e1');
 
                                                         return (
                                                             <div
@@ -1059,7 +1149,7 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
                                                                     left: clampedLeft + 1,
                                                                     width: adjustedWidth - 2,
                                                                     opacity: barOpacity,
-                                                                    backgroundColor: bgClass
+                                                                    backgroundColor: barColor
                                                                 }}
                                                                 title={`${buildDisplayLabel(trip.purpose, destinationMap.get(trip.id) || null, trip.startDate, trip.endDate)} (${trip.startDate}~${trip.endDate})`}
                                                                 onClick={() => {
@@ -1103,7 +1193,12 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
                                                             style={{
                                                                 left: (Math.round((new Date(trip.startDate).getTime() - new Date(ganttStartDate).getTime()) / (1000 * 60 * 60 * 24)) * dayWidth) + 1,
                                                                 width: (Math.round((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1) * dayWidth - 2,
-                                                                backgroundColor: categoryColors[trip.category ?? 'trip']?.bg || '#cbd5e1'
+                                                                backgroundColor: (() => {
+                                                                    const dm = destinationMap.get(trip.id);
+                                                                    return (trip.category === 'trip' || !trip.category) && dm?.destination
+                                                                        ? getDestinationColor(dm.destination)
+                                                                        : (categoryColors[trip.category ?? 'trip']?.bg || '#cbd5e1');
+                                                                })()
                                                             }}
                                                             title={`${buildDisplayLabel(trip.purpose, destinationMap.get(trip.id) || null, trip.startDate, trip.endDate)} (${trip.startDate}~${trip.endDate})`}
                                                         >
