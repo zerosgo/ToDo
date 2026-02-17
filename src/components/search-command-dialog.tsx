@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, QuickLink, Note } from '@/lib/types';
-import { getTasks, getQuickLinks, getNotes, getCategories } from '@/lib/storage';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Task, QuickLink, Note, TeamMember, BusinessTrip } from '@/lib/types';
+import { getTasks, getQuickLinks, getNotes, getCategories, getTeamMembers, getBusinessTrips } from '@/lib/storage';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
     Search,
@@ -25,10 +25,11 @@ interface SearchCommandDialogProps {
     onClose: () => void;
     onSelectTask: (task: Task) => void;
     onSelectNote: (noteId: string) => void;
+    onSelectMember?: (member: TeamMember) => void;
 }
 
-type SearchResultType = 'task' | 'team-schedule' | 'note' | 'link';
-type MatchSource = 'title' | 'assignee' | 'organizer' | 'tag' | 'note' | 'url';
+type SearchResultType = 'task' | 'team-schedule' | 'note' | 'link' | 'member';
+type MatchSource = 'title' | 'assignee' | 'organizer' | 'tag' | 'note' | 'url' | 'group' | 'part' | 'position';
 
 interface SearchResult {
     id: string;
@@ -46,7 +47,8 @@ export function SearchCommandDialog({
     isOpen,
     onClose,
     onSelectTask,
-    onSelectNote
+    onSelectNote,
+    onSelectMember
 }: SearchCommandDialogProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
@@ -366,6 +368,98 @@ export function SearchCommandDialog({
             }
         });
 
+        // 4. Team Members (with attendance status)
+        const allMembers = getTeamMembers();
+        const allTrips = getBusinessTrips();
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        allMembers.forEach(member => {
+            if (member.status === '퇴직') return; // Skip resigned members
+
+            let matchSource: MatchSource | null = null;
+
+            if (member.name.toLowerCase().includes(q)) {
+                matchSource = 'title';
+            } else if (member.group?.toLowerCase().includes(q)) {
+                matchSource = 'group';
+            } else if (member.part?.toLowerCase().includes(q)) {
+                matchSource = 'part';
+            } else if (member.position?.toLowerCase().includes(q)) {
+                matchSource = 'position';
+            }
+
+            if (matchSource) {
+                // Find current active trips/vacations/education for this member
+                const activeTrips = allTrips.filter(t => {
+                    const start = new Date(t.startDate);
+                    const end = new Date(t.endDate);
+                    end.setHours(23, 59, 59, 999);
+                    return (t.knoxId === member.knoxId || (!t.knoxId && t.name === member.name))
+                        && now >= start && now <= end;
+                });
+
+                // Build attendance status subtitle
+                let attendanceNode: React.ReactNode = null;
+                if (activeTrips.length > 0) {
+                    const trip = activeTrips[0]; // Show primary active trip
+                    const cat = trip.category || 'trip';
+                    const statusLabel = cat === 'vacation' ? '휴가중'
+                        : cat === 'education' ? '교육중'
+                            : cat === 'others' ? '기타'
+                                : '출장중';
+                    const statusColor = cat === 'vacation' ? 'text-yellow-600 dark:text-yellow-400'
+                        : cat === 'education' ? 'text-purple-600 dark:text-purple-400'
+                            : cat === 'others' ? 'text-orange-600 dark:text-orange-400'
+                                : 'text-green-600 dark:text-green-400';
+                    const dotColor = cat === 'vacation' ? 'bg-yellow-500'
+                        : cat === 'education' ? 'bg-purple-500'
+                            : cat === 'others' ? 'bg-orange-500'
+                                : 'bg-green-500';
+
+                    attendanceNode = (
+                        <div className="flex items-center gap-1.5">
+                            <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`} />
+                            <span className={`font-medium ${statusColor}`}>{statusLabel}</span>
+                            {trip.location && <span className="text-gray-400">· {trip.location}</span>}
+                            <span className="text-gray-400">({trip.startDate.slice(5)}~{trip.endDate.slice(5)})</span>
+                        </div>
+                    );
+                } else {
+                    attendanceNode = (
+                        <div className="flex items-center gap-1.5">
+                            <span className="inline-block w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />
+                            <span className="text-gray-400">재실</span>
+                        </div>
+                    );
+                }
+
+                // Build info subtitle
+                const infoLine = [member.group, member.part, member.position].filter(Boolean).join(' · ');
+                const subtitleNode = (
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-gray-500 dark:text-gray-400">
+                            {matchSource !== 'title'
+                                ? highlightText(infoLine, q)
+                                : infoLine
+                            }
+                        </span>
+                        <span className="text-[11px]">{attendanceNode}</span>
+                    </div>
+                );
+
+                searchResults.push({
+                    id: member.id,
+                    type: 'member',
+                    title: member.name,
+                    subtitle: subtitleNode,
+                    data: member,
+                    hasResource: false,
+                    matchSource: matchSource!
+                });
+            }
+        });
+
         setResults(searchResults);
         setSelectedIndex(0);
     }, [query, isOpen]);
@@ -407,6 +501,8 @@ export function SearchCommandDialog({
             onSelectNote((result.data as Note).id);
         } else if (result.type === 'link') {
             window.open((result.data as QuickLink).url, '_blank');
+        } else if (result.type === 'member') {
+            onSelectMember?.(result.data as TeamMember);
         }
 
         if (shouldClose) {
@@ -430,7 +526,8 @@ export function SearchCommandDialog({
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="p-0 gap-0 max-w-2xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xl">
+            <DialogContent className="p-0 gap-0 max-w-2xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xl" showCloseButton={false}>
+                <DialogTitle className="sr-only">전체 검색</DialogTitle>
                 {/* Search Input */}
                 <div className="flex items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800">
                     <Search className="w-5 h-5 text-gray-400 mr-3" />
@@ -522,12 +619,14 @@ export function SearchCommandDialog({
                                         <div className={`p-2 rounded-lg shrink-0 ${result.type === 'team-schedule' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' :
                                             result.type === 'task' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
                                                 result.type === 'note' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                    'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+                                                    result.type === 'member' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                        'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
                                             }`}>
                                             {result.type === 'team-schedule' && <Users className="w-4 h-4" />}
                                             {result.type === 'task' && <CheckSquare className="w-4 h-4" />}
                                             {result.type === 'note' && <FileText className="w-4 h-4" />}
                                             {result.type === 'link' && <LinkIcon className="w-4 h-4" />}
+                                            {result.type === 'member' && <User className="w-4 h-4" />}
                                         </div>
 
                                         {/* Content */}

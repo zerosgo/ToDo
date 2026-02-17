@@ -206,6 +206,9 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
         if (tripRecords.length === 0) return { destinationMap: destMap, pendingDestConflicts: pendingConflicts };
 
         trips.forEach(trip => {
+            // Only resolve destinations for 'trip' category (not vacation/education/others)
+            if (trip.category && trip.category !== 'trip') return;
+
             const result = resolveDestination(trip, tripRecords, destinationMappings);
             if (result.match) {
                 destMap.set(trip.id, result.match);
@@ -1118,50 +1121,74 @@ export function TripBoard({ onDataChange }: TripBoardProps) {
                                                         })}
                                                     </div>
 
-                                                    {/* Trips */}
-                                                    {memberTrips.map(trip => {
-                                                        const start = new Date(trip.startDate);
-                                                        const end = new Date(trip.endDate);
-                                                        const viewStart = new Date(ganttStartDate);
+                                                    {/* Trips - stack overlapping bars */}
+                                                    {(() => {
+                                                        // Calculate row index for overlapping bars
+                                                        const barRows: { start: number; end: number }[] = [];
+                                                        return memberTrips.map(trip => {
+                                                            const start = new Date(trip.startDate);
+                                                            const end = new Date(trip.endDate);
+                                                            const viewStart = new Date(ganttStartDate);
 
-                                                        const diffDays = Math.round((start.getTime() - viewStart.getTime()) / (1000 * 60 * 60 * 24));
-                                                        const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                                            const diffDays = Math.round((start.getTime() - viewStart.getTime()) / (1000 * 60 * 60 * 24));
+                                                            const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-                                                        if (diffDays + durationDays < 0) return null;
+                                                            if (diffDays + durationDays < 0) return null;
 
-                                                        const rawLeft = diffDays * dayWidth;
-                                                        const clampedLeft = Math.max(0, rawLeft);
-                                                        const clampOffset = clampedLeft - rawLeft; // how much was clipped
-                                                        const rawWidth = durationDays * dayWidth;
-                                                        const adjustedWidth = Math.max(dayWidth, rawWidth - clampOffset);
+                                                            const rawLeft = diffDays * dayWidth;
+                                                            const clampedLeft = Math.max(0, rawLeft);
+                                                            const clampOffset = clampedLeft - rawLeft;
+                                                            const rawWidth = durationDays * dayWidth;
+                                                            const adjustedWidth = Math.max(dayWidth, rawWidth - clampOffset);
 
-                                                        // Color: destination-specific for trips, category for others
-                                                        const destMatch = destinationMap.get(trip.id);
-                                                        const barColor = (trip.category === 'trip' || !trip.category) && destMatch?.destination
-                                                            ? getDestinationColor(destMatch.destination)
-                                                            : (categoryColors[trip.category ?? 'trip']?.bg || '#cbd5e1');
+                                                            // Determine row for stacking
+                                                            let row = 0;
+                                                            const barStart = clampedLeft;
+                                                            const barEnd = clampedLeft + adjustedWidth;
+                                                            for (let r = 0; r < barRows.length; r++) {
+                                                                const overlaps = barStart < barRows[r].end && barEnd > barRows[r].start;
+                                                                if (!overlaps) {
+                                                                    row = r;
+                                                                    break;
+                                                                }
+                                                                row = r + 1;
+                                                            }
+                                                            barRows[row] = { start: barStart, end: barEnd };
 
-                                                        return (
-                                                            <div
-                                                                key={trip.id}
-                                                                className={`absolute top-1 h-6 rounded shadow-sm border border-white/20 px-1.5 flex items-center text-[10px] text-white overflow-hidden whitespace-nowrap z-0`}
-                                                                style={{
-                                                                    left: clampedLeft + 1,
-                                                                    width: adjustedWidth - 2,
-                                                                    opacity: barOpacity,
-                                                                    backgroundColor: barColor
-                                                                }}
-                                                                title={`${buildDisplayLabel(trip.purpose, destinationMap.get(trip.id) || null, trip.startDate, trip.endDate)} (${trip.startDate}~${trip.endDate})`}
-                                                                onClick={() => {
-                                                                    const destMatch = destinationMap.get(trip.id);
-                                                                    const label = buildDisplayLabel(trip.purpose, destMatch || null, trip.startDate, trip.endDate);
-                                                                    alert(`${trip.name}\n${label}\n${trip.startDate} ~ ${trip.endDate}\n${destMatch?.destination || trip.location}`);
-                                                                }}
-                                                            >
-                                                                {buildDisplayLabel(trip.purpose, destinationMap.get(trip.id) || null, trip.startDate, trip.endDate)}
-                                                            </div>
-                                                        );
-                                                    })}
+                                                            const hasMultipleRows = barRows.length > 1;
+                                                            const barHeight = hasMultipleRows ? 12 : 24;
+                                                            const barTop = hasMultipleRows ? 2 + row * 14 : 4;
+
+                                                            // Color: destination-specific for trips, category for others
+                                                            const destMatch = destinationMap.get(trip.id);
+                                                            const barColor = (trip.category === 'trip' || !trip.category) && destMatch?.destination
+                                                                ? getDestinationColor(destMatch.destination)
+                                                                : (categoryColors[trip.category ?? 'trip']?.bg || '#cbd5e1');
+
+                                                            return (
+                                                                <div
+                                                                    key={trip.id}
+                                                                    className={`absolute rounded shadow-sm border border-white/20 px-1.5 flex items-center text-[10px] text-white overflow-hidden whitespace-nowrap z-0`}
+                                                                    style={{
+                                                                        left: clampedLeft + 1,
+                                                                        width: adjustedWidth - 2,
+                                                                        top: barTop,
+                                                                        height: barHeight,
+                                                                        opacity: barOpacity,
+                                                                        backgroundColor: barColor
+                                                                    }}
+                                                                    title={`${buildDisplayLabel(trip.purpose, destinationMap.get(trip.id) || null, trip.startDate, trip.endDate)} (${trip.startDate}~${trip.endDate})`}
+                                                                    onClick={() => {
+                                                                        const destMatch = destinationMap.get(trip.id);
+                                                                        const label = buildDisplayLabel(trip.purpose, destMatch || null, trip.startDate, trip.endDate);
+                                                                        alert(`${trip.name}\n${label}\n${trip.startDate} ~ ${trip.endDate}\n${destMatch?.destination || trip.location}`);
+                                                                    }}
+                                                                >
+                                                                    {buildDisplayLabel(trip.purpose, destinationMap.get(trip.id) || null, trip.startDate, trip.endDate)}
+                                                                </div>
+                                                            );
+                                                        });
+                                                    })()}
                                                 </div>
                                             </div>
                                         );

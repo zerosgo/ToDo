@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Category, Task } from '@/lib/types';
+import { Category, Task, TeamMember } from '@/lib/types';
 import { format } from 'date-fns';
 import { getCategories, getTasks, addTask, getTheme, setTheme, Theme, getLayoutState, saveLayoutState, getLayoutPreset, saveLayoutPreset, Layout, LayoutState, generateId, addCategory, deleteTask, updateTask, addNote, updateNote } from '@/lib/storage';
 import { Sidebar } from '@/components/sidebar';
@@ -16,6 +16,8 @@ import { TeamScheduleAddModal } from '@/components/team-schedule-add-modal';
 import { SearchCommandDialog } from '@/components/search-command-dialog';
 import { TeamMemberBoard } from '@/components/team-member-board';
 import { TripBoard } from '@/components/trip-board';
+import { TeamMemberModal } from '@/components/team-member-modal';
+import { DashboardView } from '@/components/dashboard-view';
 
 import { ParsedSchedule, parseScheduleText } from '@/lib/schedule-parser';
 import { Button } from '@/components/ui/button';
@@ -38,13 +40,14 @@ export default function Home() {
   const [theme, setThemeState] = useState<Theme>('light');
   const [layout, setLayoutState] = useState<Layout>(1);
   const [showWeekends, setShowWeekends] = useState(true);
-  const [viewMode, setViewMode] = useState<'calendar' | 'keep' | 'favorites' | 'team' | 'trip'>('calendar');
+  const [viewMode, setViewMode] = useState<'calendar' | 'keep' | 'favorites' | 'team' | 'trip' | 'dashboard'>('calendar');
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [notesVersion, setNotesVersion] = useState(0);
   const [isTeamScheduleModalOpen, setIsTeamScheduleModalOpen] = useState(false);
   const [editingScheduleTask, setEditingScheduleTask] = useState<Task | null>(null);
   const [collectionGroups, setCollectionGroups] = useState<string[]>(['CP', 'OLB', 'LASER', '라미1', '라미2']);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedMemberForModal, setSelectedMemberForModal] = useState<TeamMember | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewModeRef = useRef(viewMode);
 
@@ -137,7 +140,7 @@ export default function Home() {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault();
         setViewMode(prev => {
-          const views: ('calendar' | 'keep' | 'favorites' | 'team' | 'trip')[] = ['calendar', 'favorites', 'keep', 'team', 'trip'];
+          const views: ('calendar' | 'keep' | 'favorites' | 'team' | 'trip' | 'dashboard')[] = ['dashboard', 'calendar', 'favorites', 'keep', 'team', 'trip'];
           const currentIdx = views.indexOf(prev);
           if (e.key === 'ArrowRight') {
             return views[(currentIdx + 1) % views.length];
@@ -651,6 +654,7 @@ export default function Home() {
                   onImportSchedule={() => setIsScheduleImportOpen(true)}
                   onTeamViewClick={() => setViewMode('team')}
                   onTripViewClick={() => setViewMode('trip')}
+                  onDashboardClick={() => setViewMode('dashboard')}
                   onPinnedMemoClick={(noteId) => {
                     setViewMode('keep');
                     if (noteId) {
@@ -751,13 +755,23 @@ export default function Home() {
               <TripBoard
                 onDataChange={handleTasksChange}
               />
+            ) : viewMode === 'dashboard' ? (
+              <DashboardView
+                onTaskClick={(task) => setDetailTask(task)}
+                onNoteClick={(noteId) => {
+                  setViewMode('keep');
+                  setSelectedNoteId(noteId);
+                }}
+                onSearchClick={() => setIsSearchOpen(true)}
+                teamScheduleCategoryId={categories.find(c => c.name === '팀 일정')?.id || ''}
+              />
             ) : null}
           </div>
         );
 
         // Render based on layout
         // For 'team' or 'trip' views, we hide the task list to give full width to the board
-        if (viewMode === 'team' || viewMode === 'trip') {
+        if (viewMode === 'team' || viewMode === 'trip' || viewMode === 'dashboard') {
           // Respect Layout 3 (Sidebar on Right)
           if (layout === 3) {
             return <>{mainPanel}{sidebarPanel}</>;
@@ -830,7 +844,21 @@ export default function Home() {
           // But we have setSelectedNoteId in page!
           setSelectedNoteId(noteId);
         }}
+        onSelectMember={(member) => {
+          setSelectedMemberForModal(member);
+        }}
       />
+      {selectedMemberForModal && (
+        <TeamMemberModal
+          member={selectedMemberForModal}
+          isOpen={!!selectedMemberForModal}
+          onClose={() => setSelectedMemberForModal(null)}
+          onUpdate={() => {
+            // Refresh data if member was edited
+            handleTasksChange();
+          }}
+        />
+      )}
     </div>
   );
 }

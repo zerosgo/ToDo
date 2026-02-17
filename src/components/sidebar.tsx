@@ -58,6 +58,7 @@ interface SidebarProps {
     onPinnedMemoClick?: (noteId: string) => void;
     onTeamViewClick?: () => void;
     onTripViewClick?: () => void;
+    onDashboardClick?: () => void;
     notesVersion?: number;
 }
 
@@ -77,6 +78,7 @@ export function Sidebar({
     onPinnedMemoClick,
     onTeamViewClick,
     onTripViewClick,
+    onDashboardClick,
     notesVersion,
 }: SidebarProps) {
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -668,6 +670,16 @@ export function Sidebar({
                         <Plane className="w-3.5 h-3.5 mr-1" />
                         출장 관리
                     </Button>
+                    {/* 대시보드 버튼 - 필요시 다시 활성화
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs w-full mt-2 border-indigo-200 hover:bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:hover:bg-indigo-900/30 dark:text-indigo-400"
+                        onClick={onDashboardClick}
+                    >
+                        📊 대시보드
+                    </Button>
+                    */}
                 </div>
             </div >
 
